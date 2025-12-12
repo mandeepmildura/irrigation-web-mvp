@@ -1,8 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from datetime import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
+import atexit
 
-from db import Base, engine, get_db
+from db import Base, engine, get_db, SessionLocal
 import models, schemas
 
 Base.metadata.create_all(bind=engine)
@@ -19,9 +22,10 @@ app.add_middleware(
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "ts": datetime.utcnow().isoformat()}
 
-# Zones
+# ---------- API endpoints ----------
+
 @app.post("/zones", response_model=schemas.ZoneOut)
 def create_zone(payload: schemas.ZoneCreate, db: Session = Depends(get_db)):
     existing = db.query(models.Zone).filter(models.Zone.name == payload.name).first()
@@ -37,7 +41,6 @@ def create_zone(payload: schemas.ZoneCreate, db: Session = Depends(get_db)):
 def list_zones(db: Session = Depends(get_db)):
     return db.query(models.Zone).order_by(models.Zone.id).all()
 
-# Schedules
 @app.post("/schedules", response_model=schemas.ScheduleOut)
 def create_schedule(payload: schemas.ScheduleCreate, db: Session = Depends(get_db)):
     zone = db.query(models.Zone).filter(models.Zone.id == payload.zone_id).first()
@@ -58,12 +61,17 @@ def create_schedule(payload: schemas.ScheduleCreate, db: Session = Depends(get_d
 def list_schedules(db: Session = Depends(get_db)):
     return db.query(models.Schedule).order_by(models.Schedule.id).all()
 
-# Manual run (later: call Home Assistant / MQTT here)
 @app.post("/run/{zone_name}")
-def run_zone(zone_name: str, minutes: int = 10):
-    return {"action": "RUN", "zone": zone_name, "duration_minutes": minutes}
+def run_zone(zone_name: str, minutes: int = 10, source: str = "manual"):
+    # Later: call Home Assistant / MQTT / relay controller here
+    return {
+        "action": "RUN",
+        "zone": zone_name,
+        "duration_minutes": minutes,
+        "source": source,
+        "ts": datetime.utcnow().isoformat(),
+    }
 
-# Sensors
 @app.post("/readings", response_model=schemas.SensorReadingOut)
 def add_reading(payload: schemas.SensorReadingCreate, db: Session = Depends(get_db)):
     r = models.SensorReading(zone_name=payload.zone_name, metric=payload.metric, value=payload.value)
@@ -80,3 +88,35 @@ def latest_readings(limit: int = 50, db: Session = Depends(get_db)):
         .limit(limit)
         .all()
     )
+
+# ---------- Scheduler (Option B: skip missed runs) ----------
+
+scheduler = BackgroundScheduler(timezone="Australia/Melbourne")
+
+def schedule_tick():
+    """
+    Runs every minute.
+    If current time matches a schedule start_time exactly (HH:MM) and schedule is enabled,
+    trigger a run. We do NOT run missed schedules (Option B).
+    """
+    now = datetime.now().strftime("%H:%M")
+
+    db = SessionLocal()
+    try:
+        schedules = db.query(models.Schedule).filter(models.Schedule.enabled == 1).all()
+        for s in schedules:
+            if s.start_time == now:
+                zone = db.query(models.Zone).filter(models.Zone.id == s.zone_id).first()
+                if zone:
+                    # Trigger run (currently just returns JSON; later integrate HA/MQTT)
+                    run_zone(zone.name, minutes=s.duration_minutes, source=f"schedule:{s.id}")
+    finally:
+        db.close()
+
+@app.on_event("startup")
+def start_scheduler():
+    if not scheduler.running:
+        scheduler.add_job(schedule_tick, "cron", second=0)  # every minute at :00
+        scheduler.start()
+
+atexit.register(lambda: scheduler.shutdown(wait=False))
