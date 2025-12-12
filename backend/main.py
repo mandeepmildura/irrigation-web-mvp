@@ -14,7 +14,7 @@ app = FastAPI(title="Irrigation Web MVP")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TEMP for testing (lock down later)
+    allow_origins=["*"],  # TEMP for testing; lock down later
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -24,8 +24,19 @@ app.add_middleware(
 def health():
     return {"ok": True, "ts": datetime.utcnow().isoformat()}
 
-# ---------- API endpoints ----------
+# ---------- Run logging helper ----------
+def execute_run(zone_name: str, minutes: int, source: str):
+    db = SessionLocal()
+    try:
+        r = models.IrrigationRun(zone_name=zone_name, duration_minutes=minutes, source=source)
+        db.add(r)
+        db.commit()
+        db.refresh(r)
+        return r
+    finally:
+        db.close()
 
+# ---------- Zones ----------
 @app.post("/zones", response_model=schemas.ZoneOut)
 def create_zone(payload: schemas.ZoneCreate, db: Session = Depends(get_db)):
     existing = db.query(models.Zone).filter(models.Zone.name == payload.name).first()
@@ -41,6 +52,7 @@ def create_zone(payload: schemas.ZoneCreate, db: Session = Depends(get_db)):
 def list_zones(db: Session = Depends(get_db)):
     return db.query(models.Zone).order_by(models.Zone.id).all()
 
+# ---------- Schedules ----------
 @app.post("/schedules", response_model=schemas.ScheduleOut)
 def create_schedule(payload: schemas.ScheduleCreate, db: Session = Depends(get_db)):
     zone = db.query(models.Zone).filter(models.Zone.id == payload.zone_id).first()
@@ -61,17 +73,25 @@ def create_schedule(payload: schemas.ScheduleCreate, db: Session = Depends(get_d
 def list_schedules(db: Session = Depends(get_db)):
     return db.query(models.Schedule).order_by(models.Schedule.id).all()
 
-@app.post("/run/{zone_name}")
+# ---------- Manual run (logs to DB) ----------
+@app.post("/run/{zone_name}", response_model=schemas.RunOut)
 def run_zone(zone_name: str, minutes: int = 10, source: str = "manual"):
-    # Later: call Home Assistant / MQTT / relay controller here
-    return {
-        "action": "RUN",
-        "zone": zone_name,
-        "duration_minutes": minutes,
-        "source": source,
-        "ts": datetime.utcnow().isoformat(),
-    }
+    # Later: call Home Assistant / MQTT here, but ALWAYS log the run
+    return execute_run(zone_name=zone_name, minutes=minutes, source=source)
 
+# ---------- Run history ----------
+@app.get("/runs", response_model=list[schemas.RunOut])
+def list_runs(limit: int = 100, zone_name: str | None = None):
+    db = SessionLocal()
+    try:
+        q = db.query(models.IrrigationRun)
+        if zone_name:
+            q = q.filter(models.IrrigationRun.zone_name == zone_name)
+        return q.order_by(models.IrrigationRun.ts.desc()).limit(limit).all()
+    finally:
+        db.close()
+
+# ---------- Sensors ----------
 @app.post("/readings", response_model=schemas.SensorReadingOut)
 def add_reading(payload: schemas.SensorReadingCreate, db: Session = Depends(get_db)):
     r = models.SensorReading(zone_name=payload.zone_name, metric=payload.metric, value=payload.value)
@@ -89,41 +109,28 @@ def latest_readings(limit: int = 50, db: Session = Depends(get_db)):
         .all()
     )
 
-# ---------- Scheduler (Option B: skip missed runs) ----------
-
+# ---------- Scheduler (Option B: skip missed schedules) ----------
 scheduler = BackgroundScheduler(timezone="Australia/Melbourne")
 
 def schedule_tick():
-    now = datetime.now().strftime("%H:%M")
+    now = datetime.now().strftime("%H:%M")  # Melbourne time due to scheduler timezone
 
     db = SessionLocal()
     try:
         schedules = db.query(models.Schedule).filter(models.Schedule.enabled == 1).all()
-
         for s in schedules:
             if s.start_time == now:
                 zone = db.query(models.Zone).filter(models.Zone.id == s.zone_id).first()
-
                 if zone:
-                    print(
-                        f"[SCHEDULE] Triggering zone={zone.name} "
-                        f"schedule_id={s.id} minutes={s.duration_minutes} at {now}",
-                        flush=True
-                    )
-
-                    run_zone(
-                        zone.name,
-                        minutes=s.duration_minutes,
-                        source=f"schedule:{s.id}"
-                    )
+                    # Log a run instead of "catching up" later (Option B)
+                    execute_run(zone_name=zone.name, minutes=s.duration_minutes, source=f"schedule:{s.id}")
     finally:
         db.close()
-
 
 @app.on_event("startup")
 def start_scheduler():
     if not scheduler.running:
-        scheduler.add_job(schedule_tick, "cron", second=0)  # every minute at :00
+        scheduler.add_job(schedule_tick, "cron", second=0)  # runs every minute at :00
         scheduler.start()
 
 atexit.register(lambda: scheduler.shutdown(wait=False))
