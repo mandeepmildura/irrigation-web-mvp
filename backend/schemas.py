@@ -40,3 +40,12 @@ class SensorReadingOut(BaseModel):
     ts: datetime
     class Config:
         from_attributes = True
+
+class RunOut(BaseModel):
+    id: int
+    zone_name: str
+    duration_minutes: int
+    source: str
+    ts: datetime
+    class Config:
+        from_attributes = True
