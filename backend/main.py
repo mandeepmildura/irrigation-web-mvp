@@ -94,24 +94,31 @@ def latest_readings(limit: int = 50, db: Session = Depends(get_db)):
 scheduler = BackgroundScheduler(timezone="Australia/Melbourne")
 
 def schedule_tick():
-    """
-    Runs every minute.
-    If current time matches a schedule start_time exactly (HH:MM) and schedule is enabled,
-    trigger a run. We do NOT run missed schedules (Option B).
-    """
     now = datetime.now().strftime("%H:%M")
 
     db = SessionLocal()
     try:
         schedules = db.query(models.Schedule).filter(models.Schedule.enabled == 1).all()
+
         for s in schedules:
             if s.start_time == now:
                 zone = db.query(models.Zone).filter(models.Zone.id == s.zone_id).first()
+
                 if zone:
-                    # Trigger run (currently just returns JSON; later integrate HA/MQTT)
-                    run_zone(zone.name, minutes=s.duration_minutes, source=f"schedule:{s.id}")
+                    print(
+                        f"[SCHEDULE] Triggering zone={zone.name} "
+                        f"schedule_id={s.id} minutes={s.duration_minutes} at {now}",
+                        flush=True
+                    )
+
+                    run_zone(
+                        zone.name,
+                        minutes=s.duration_minutes,
+                        source=f"schedule:{s.id}"
+                    )
     finally:
         db.close()
+
 
 @app.on_event("startup")
 def start_scheduler():
