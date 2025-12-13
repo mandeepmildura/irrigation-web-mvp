@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # 🔴 IMPORTANT
 # Using persistent disk on Render
 # This file path MUST match your Render disk mount
-DB_URL = "sqlite:////var/data/irrigation.db"
+DB_URL = "sqlite:////var/data/irrigation_v2.db"
 
 engine = create_engine(
     DB_URL,
