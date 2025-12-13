@@ -1,1 +1,112 @@
 
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Irrigation Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f7f7f7;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    .zone {
+      background: white;
+      padding: 15px;
+      margin-bottom: 15px;
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    button {
+      margin-right: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+    }
+    th, td {
+      padding: 8px;
+      border-bottom: 1px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+
+<h1>🌱 Irrigation Dashboard</h1>
+
+<h2>Zones</h2>
+<div id="zones"></div>
+
+<h2>Recent Runs</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Time</th>
+      <th>Zone</th>
+      <th>Minutes</th>
+      <th>Source</th>
+    </tr>
+  </thead>
+  <tbody id="runs"></tbody>
+</table>
+
+<script>
+const API = "";
+
+async function loadZones() {
+  const res = await fetch(API + "/zones");
+  const zones = await res.json();
+  const el = document.getElementById("zones");
+  el.innerHTML = "";
+
+  zones.forEach(z => {
+    const d = document.createElement("div");
+    d.className = "zone";
+    d.innerHTML = `
+      <strong>${z.name}</strong><br><br>
+      <button onclick="runZone('${z.name}',1)">Run 1 min</button>
+      <button onclick="runZone('${z.name}',5)">Run 5 min</button>
+      <button onclick="runZone('${z.name}',10)">Run 10 min</button>
+    `;
+    el.appendChild(d);
+  });
+}
+
+async function runZone(name, minutes) {
+  await fetch(API + `/run/${encodeURIComponent(name)}?minutes=${minutes}`, {
+    method: "POST"
+  });
+  loadRuns();
+}
+
+async function loadRuns() {
+  const res = await fetch(API + "/runs?limit=10");
+  const runs = await res.json();
+  const el = document.getElementById("runs");
+  el.innerHTML = "";
+
+  runs.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${new Date(r.ts).toLocaleString()}</td>
+      <td>${r.zone_name}</td>
+      <td>${r.duration_minutes}</td>
+      <td>${r.source}</td>
+    `;
+    el.appendChild(tr);
+  });
+}
+
+loadZones();
+loadRuns();
+setInterval(loadRuns, 15000);
+</script>
+
+</body>
+</html>
