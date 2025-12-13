@@ -119,20 +119,30 @@ def latest_readings(limit: int = 50, db: Session = Depends(get_db)):
 # ---------- Scheduler (Option B: skip missed schedules) ----------
 scheduler = BackgroundScheduler(timezone="Australia/Melbourne")
 
+from zoneinfo import ZoneInfo
+
 def schedule_tick():
-    now = datetime.now().strftime("%H:%M")  # Melbourne time due to scheduler timezone
+    mel_now = datetime.now(ZoneInfo("Australia/Melbourne"))
+    current_minute = mel_now.strftime("%H:%M")
 
     db = SessionLocal()
     try:
         schedules = db.query(models.Schedule).filter(models.Schedule.enabled == 1).all()
+
         for s in schedules:
-            if s.start_time == now:
+            if s.start_time == current_minute and s.last_run_minute != current_minute:
                 zone = db.query(models.Zone).filter(models.Zone.id == s.zone_id).first()
                 if zone:
-                    # Log a run instead of "catching up" later (Option B)
-                    execute_run(zone_name=zone.name, minutes=s.duration_minutes, source=f"schedule:{s.id}")
+                    execute_run(
+                        zone_name=zone.name,
+                        minutes=s.duration_minutes,
+                        source=f"schedule:{s.id}"
+                    )
+                    s.last_run_minute = current_minute
+                    db.commit()
     finally:
         db.close()
+
 
 @app.on_event("startup")
 def start_scheduler():
