@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
-import atexit
 from zoneinfo import ZoneInfo
+import atexit
 
 from db import Base, engine, get_db, SessionLocal
 import models, schemas
@@ -25,6 +25,15 @@ app.add_middleware(
 def health():
     return {"ok": True, "ts": datetime.utcnow().isoformat()}
 
+@app.get("/now")
+def now_time():
+    mel = datetime.now(ZoneInfo("Australia/Melbourne"))
+    utc = datetime.utcnow()
+    return {
+        "melbourne": mel.strftime("%Y-%m-%d %H:%M:%S"),
+        "utc": utc.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
 # ---------- Run logging helper ----------
 def execute_run(zone_name: str, minutes: int, source: str):
     db = SessionLocal()
@@ -36,12 +45,6 @@ def execute_run(zone_name: str, minutes: int, source: str):
         return r
     finally:
         db.close()
-@app.get("/now")
-def now_time():
-    mel = datetime.now(ZoneInfo("Australia/Melbourne"))
-    utc = datetime.utcnow()
-    return {"melbourne": mel.strftime("%Y-%m-%d %H:%M:%S"), "utc": utc.strftime("%Y-%m-%d %H:%M:%S")}
-
 
 # ---------- Zones ----------
 @app.post("/zones", response_model=schemas.ZoneOut)
@@ -65,11 +68,13 @@ def create_schedule(payload: schemas.ScheduleCreate, db: Session = Depends(get_d
     zone = db.query(models.Zone).filter(models.Zone.id == payload.zone_id).first()
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
+
     s = models.Schedule(
         zone_id=payload.zone_id,
         start_time=payload.start_time,
         duration_minutes=payload.duration_minutes,
         enabled=1 if payload.enabled else 0,
+        last_run_minute=None,  # new
     )
     db.add(s)
     db.commit()
@@ -83,7 +88,6 @@ def list_schedules(db: Session = Depends(get_db)):
 # ---------- Manual run (logs to DB) ----------
 @app.post("/run/{zone_name}", response_model=schemas.RunOut)
 def run_zone(zone_name: str, minutes: int = 10, source: str = "manual"):
-    # Later: call Home Assistant / MQTT here, but ALWAYS log the run
     return execute_run(zone_name=zone_name, minutes=minutes, source=source)
 
 # ---------- Run history ----------
@@ -116,10 +120,8 @@ def latest_readings(limit: int = 50, db: Session = Depends(get_db)):
         .all()
     )
 
-# ---------- Scheduler (Option B: skip missed schedules) ----------
+# ---------- Scheduler (skip missed; never double-run within same minute) ----------
 scheduler = BackgroundScheduler(timezone="Australia/Melbourne")
-
-from zoneinfo import ZoneInfo
 
 def schedule_tick():
     mel_now = datetime.now(ZoneInfo("Australia/Melbourne"))
@@ -130,25 +132,24 @@ def schedule_tick():
         schedules = db.query(models.Schedule).filter(models.Schedule.enabled == 1).all()
 
         for s in schedules:
+            # run once per matching minute
             if s.start_time == current_minute and s.last_run_minute != current_minute:
                 zone = db.query(models.Zone).filter(models.Zone.id == s.zone_id).first()
                 if zone:
                     execute_run(
                         zone_name=zone.name,
                         minutes=s.duration_minutes,
-                        source=f"schedule:{s.id}"
+                        source=f"schedule:{s.id}",
                     )
                     s.last_run_minute = current_minute
                     db.commit()
     finally:
         db.close()
 
-
 @app.on_event("startup")
 def start_scheduler():
     if not scheduler.running:
         scheduler.add_job(schedule_tick, "interval", seconds=20)
-  # runs every minute at :00
         scheduler.start()
 
 atexit.register(lambda: scheduler.shutdown(wait=False))
