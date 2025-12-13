@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
+from zoneinfo import ZoneInfo
 
 from db import Base, engine, get_db, SessionLocal
 import models, schemas
@@ -35,6 +36,12 @@ def execute_run(zone_name: str, minutes: int, source: str):
         return r
     finally:
         db.close()
+@app.get("/now")
+def now_time():
+    mel = datetime.now(ZoneInfo("Australia/Melbourne"))
+    utc = datetime.utcnow()
+    return {"melbourne": mel.strftime("%Y-%m-%d %H:%M:%S"), "utc": utc.strftime("%Y-%m-%d %H:%M:%S")}
+
 
 # ---------- Zones ----------
 @app.post("/zones", response_model=schemas.ZoneOut)
