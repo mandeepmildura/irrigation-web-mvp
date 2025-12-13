@@ -18,7 +18,8 @@ class Schedule(Base):
     start_time: Mapped[str] = mapped_column(String)  # "HH:MM"
     duration_minutes: Mapped[int] = mapped_column(Integer)
     enabled: Mapped[int] = mapped_column(Integer, default=1)
-
+    last_run_minute: Mapped[str | None] = mapped_column(String, nullable=True)
+  
     zone = relationship("Zone", back_populates="schedules")
 
 class SensorReading(Base):
