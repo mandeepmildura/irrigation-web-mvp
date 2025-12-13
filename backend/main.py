@@ -147,7 +147,8 @@ def schedule_tick():
 @app.on_event("startup")
 def start_scheduler():
     if not scheduler.running:
-        scheduler.add_job(schedule_tick, "cron", second=0)  # runs every minute at :00
+        scheduler.add_job(schedule_tick, "interval", seconds=20)
+  # runs every minute at :00
         scheduler.start()
 
 atexit.register(lambda: scheduler.shutdown(wait=False))
