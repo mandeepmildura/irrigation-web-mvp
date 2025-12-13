@@ -11,10 +11,10 @@
     }
 
     h1, h2 {
-      margin-bottom: 10px;
+      margin-top: 30px;
     }
 
-    .zone {
+    .zone, .card {
       border: 1px solid #ddd;
       padding: 12px;
       margin-bottom: 16px;
@@ -22,9 +22,14 @@
     }
 
     button {
-      margin-right: 8px;
+      margin-right: 6px;
       padding: 6px 10px;
       cursor: pointer;
+    }
+
+    input, select {
+      padding: 6px;
+      margin-right: 6px;
     }
 
     table {
@@ -48,9 +53,38 @@
 
 <h1>🌱 Irrigation Dashboard</h1>
 
+<!-- ================= ZONES ================= -->
 <h2>Zones</h2>
 <div id="zones"></div>
 
+<!-- ============== SCHEDULE EDITOR ============== -->
+<h2>📅 Schedules</h2>
+
+<div class="card">
+  <strong>Create Schedule</strong><br/><br/>
+
+  <select id="scheduleZone"></select>
+
+  <input type="time" id="scheduleTime" />
+
+  <input type="number" id="scheduleMinutes" value="10" min="1" />
+
+  <button onclick="createSchedule()">Add</button>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Zone</th>
+      <th>Start Time</th>
+      <th>Minutes</th>
+      <th>Enabled</th>
+    </tr>
+  </thead>
+  <tbody id="scheduleTable"></tbody>
+</table>
+
+<!-- ================= RUN HISTORY ================= -->
 <h2>Recent Runs</h2>
 <table>
   <thead>
@@ -65,15 +99,11 @@
 </table>
 
 <script>
-/* ================= CONFIG ================= */
-const API = ""; // same domain (Render)
+const API = "";
 
-/* ============== TIME FORMAT ============== */
+/* ================= TIME ================= */
 function formatMelbourne(ts) {
-  // Backend timestamps have no timezone → force UTC
   const iso = ts.endsWith("Z") ? ts : ts + "Z";
-  const d = new Date(iso);
-
   return new Intl.DateTimeFormat("en-AU", {
     timeZone: "Australia/Melbourne",
     year: "numeric",
@@ -83,10 +113,121 @@ function formatMelbourne(ts) {
     minute: "2-digit",
     second: "2-digit",
     hour12: false
-  }).format(d);
+  }).format(new Date(iso));
 }
 
-/* ============== ZONES ==================== */
+/* ================= ZONES ================= */
+let zonesCache = [];
+
 async function loadZones() {
   const res = await fetch(`${API}/zones`);
-  const zones = awa
+  zonesCache = await res.json();
+
+  const zonesDiv = document.getElementById("zones");
+  const select = document.getElementById("scheduleZone");
+
+  zonesDiv.innerHTML = "";
+  select.innerHTML = "";
+
+  zonesCache.forEach(z => {
+    // Zone card
+    const div = document.createElement("div");
+    div.className = "zone";
+    div.innerHTML = `
+      <strong>${z.name}</strong><br/><br/>
+      <button onclick="runZone('${z.name}',1)">Run 1 min</button>
+      <button onclick="runZone('${z.name}',5)">Run 5 min</button>
+      <button onclick="runZone('${z.name}',10)">Run 10 min</button>
+    `;
+    zonesDiv.appendChild(div);
+
+    // Schedule dropdown
+    const opt = document.createElement("option");
+    opt.value = z.id;
+    opt.textContent = z.name;
+    select.appendChild(opt);
+  });
+}
+
+/* ================= MANUAL RUN ================= */
+async function runZone(zone, minutes) {
+  await fetch(`${API}/run/${encodeURIComponent(zone)}?minutes=${minutes}`, {
+    method: "POST"
+  });
+  setTimeout(loadRuns, 500);
+}
+
+/* ================= RUN HISTORY ================= */
+async function loadRuns() {
+  const res = await fetch(`${API}/runs?limit=20`);
+  const runs = await res.json();
+
+  const tbody = document.getElementById("runs");
+  tbody.innerHTML = "";
+
+  runs.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${formatMelbourne(r.ts)}</td>
+      <td>${r.zone_name}</td>
+      <td>${r.duration_minutes}</td>
+      <td>${r.source}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ================= SCHEDULES ================= */
+async function loadSchedules() {
+  const res = await fetch(`${API}/schedules`);
+  const schedules = await res.json();
+
+  const tbody = document.getElementById("scheduleTable");
+  tbody.innerHTML = "";
+
+  schedules.forEach(s => {
+    const zone = zonesCache.find(z => z.id === s.zone_id);
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>${zone ? zone.name : s.zone_id}</td>
+      <td>${s.start_time}</td>
+      <td>${s.duration_minutes}</td>
+      <td>${s.enabled ? "✅" : "❌"}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function createSchedule() {
+  const zoneId = document.getElementById("scheduleZone").value;
+  const time = document.getElementById("scheduleTime").value;
+  const minutes = document.getElementById("scheduleMinutes").value;
+
+  if (!time) {
+    alert("Select start time");
+    return;
+  }
+
+  await fetch(`${API}/schedules`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      zone_id: Number(zoneId),
+      start_time: time,
+      duration_minutes: Number(minutes),
+      enabled: true
+    })
+  });
+
+  loadSchedules();
+}
+
+/* ================= INIT ================= */
+loadZones().then(loadSchedules);
+loadRuns();
+setInterval(loadRuns, 10000);
+</script>
+
+</body>
+</html>
