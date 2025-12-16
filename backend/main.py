@@ -241,7 +241,7 @@ def start_scheduler():
         run_migrations()
     except Exception as exc:
         print(f"[db] Migration failed: {exc}")
-        return
+        raise
 
     if not scheduler.running:
         scheduler.add_job(schedule_tick, "interval", seconds=20)
