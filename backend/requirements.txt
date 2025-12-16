@@ -3,3 +3,5 @@ uvicorn[standard]==0.30.6
 sqlalchemy==2.0.34
 pydantic==2.8.2
 apscheduler==3.10.4
+paho-mqtt==2.1.0
+alembic==1.13.2

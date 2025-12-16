@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>Irrigation Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
     body {
@@ -53,6 +54,12 @@
 
 <h1>🌱 Irrigation Dashboard</h1>
 
+<div class="card">
+  <strong>API Access</strong><br/><br/>
+  <label>API Key: <input type="password" id="apiToken" placeholder="X-API-Key value" /></label>
+  <button onclick="setToken()">Save</button>
+</div>
+
 <!-- ================= ZONES ================= -->
 <h2>Zones</h2>
 <div id="zones"></div>
@@ -69,6 +76,14 @@
 
   <input type="number" id="scheduleMinutes" value="10" min="1" />
 
+  <input type="text" id="scheduleDays" placeholder="mon,wed,fri or *" value="*" />
+
+  <input type="number" id="scheduleMoisture" placeholder=">= moisture skip" step="0.1" min="0" />
+
+  <input type="number" id="scheduleLookback" value="120" min="15" max="1440" />
+
+  <label><input type="checkbox" id="scheduleEnabled" checked /> Enabled</label>
+
   <button onclick="createSchedule()">Add</button>
 </div>
 
@@ -79,10 +94,25 @@
       <th>Start Time</th>
       <th>Minutes</th>
       <th>Enabled</th>
+      <th>Days</th>
+      <th>Moisture rule</th>
     </tr>
   </thead>
   <tbody id="scheduleTable"></tbody>
 </table>
+
+<!-- ================= CHARTS ================= -->
+<h2>📈 Charts</h2>
+<div class="card">
+  <strong>Sensor Series</strong><br/><br/>
+  <select id="chartZone"></select>
+  <select id="chartMetric"></select>
+  <select id="chartRange"></select>
+  <button onclick="loadChartSeries()">Load</button>
+</div>
+<div class="card">
+  <canvas id="chartCanvas" height="180"></canvas>
+</div>
 
 <!-- ================= RUN HISTORY ================= -->
 <h2>Recent Runs</h2>
@@ -100,6 +130,29 @@
 
 <script>
 const API = "";
+const TOKEN_KEY = "irrigation_api_token";
+const METRICS = ["moisture", "temperature", "humidity", "pressure", "flow"];
+const RANGES = [6, 12, 24, 72, 168];
+let chartInstance = null;
+
+function getHeaders() {
+  const token = localStorage.getItem(TOKEN_KEY) || "";
+  return token ? { "X-API-Key": token } : {};
+}
+
+function setToken() {
+  const token = document.getElementById("apiToken").value.trim();
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token);
+  } else {
+    localStorage.removeItem(TOKEN_KEY);
+  }
+  loadZones().then(() => {
+    loadSchedules();
+    loadChartSeries();
+  });
+  loadRuns();
+}
 
 /* ================= TIME ================= */
 function formatMelbourne(ts) {
@@ -120,14 +173,16 @@ function formatMelbourne(ts) {
 let zonesCache = [];
 
 async function loadZones() {
-  const res = await fetch(`${API}/zones`);
+  const res = await fetch(`${API}/zones`, { headers: getHeaders() });
   zonesCache = await res.json();
 
   const zonesDiv = document.getElementById("zones");
   const select = document.getElementById("scheduleZone");
+  const chartZone = document.getElementById("chartZone");
 
   zonesDiv.innerHTML = "";
   select.innerHTML = "";
+  chartZone.innerHTML = "";
 
   zonesCache.forEach(z => {
     // Zone card
@@ -146,20 +201,26 @@ async function loadZones() {
     opt.value = z.id;
     opt.textContent = z.name;
     select.appendChild(opt);
+
+    const chartOpt = document.createElement("option");
+    chartOpt.value = z.name;
+    chartOpt.textContent = z.name;
+    chartZone.appendChild(chartOpt);
   });
 }
 
 /* ================= MANUAL RUN ================= */
 async function runZone(zone, minutes) {
   await fetch(`${API}/run/${encodeURIComponent(zone)}?minutes=${minutes}`, {
-    method: "POST"
+    method: "POST",
+    headers: getHeaders()
   });
   setTimeout(loadRuns, 500);
 }
 
 /* ================= RUN HISTORY ================= */
 async function loadRuns() {
-  const res = await fetch(`${API}/runs?limit=20`);
+  const res = await fetch(`${API}/runs?limit=20`, { headers: getHeaders() });
   const runs = await res.json();
 
   const tbody = document.getElementById("runs");
@@ -177,9 +238,76 @@ async function loadRuns() {
   });
 }
 
+/* ================= CHARTS ================= */
+function initChartSelectors() {
+  const metricSelect = document.getElementById("chartMetric");
+  const rangeSelect = document.getElementById("chartRange");
+
+  metricSelect.innerHTML = "";
+  METRICS.forEach(m => {
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = m;
+    metricSelect.appendChild(opt);
+  });
+
+  rangeSelect.innerHTML = "";
+  RANGES.forEach(h => {
+    const opt = document.createElement("option");
+    opt.value = h;
+    opt.textContent = `${h}h`;
+    rangeSelect.appendChild(opt);
+  });
+  rangeSelect.value = 24;
+}
+
+async function loadChartSeries() {
+  const zone = document.getElementById("chartZone").value;
+  const metric = document.getElementById("chartMetric").value;
+  const hours = Number(document.getElementById("chartRange").value || 24);
+
+  if (!zone || !metric) {
+    return;
+  }
+
+  const res = await fetch(`${API}/chart/series?zone_name=${encodeURIComponent(zone)}&metric=${encodeURIComponent(metric)}&hours=${hours}`, { headers: getHeaders() });
+  const series = await res.json();
+
+  const labels = series.map(p => formatMelbourne(p.ts));
+  const values = series.map(p => p.value);
+
+  const ctx = document.getElementById("chartCanvas").getContext("2d");
+  if (chartInstance) {
+    chartInstance.destroy();
+  }
+
+  chartInstance = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: `${metric} (${zone})`,
+          data: values,
+          fill: false,
+          borderColor: "#2c7a7b",
+          tension: 0.2
+        }
+      ]
+    },
+    options: {
+      plugins: { legend: { display: true } },
+      scales: {
+        x: { display: true, ticks: { maxTicksLimit: 8 } },
+        y: { beginAtZero: false }
+      }
+    }
+  });
+}
+
 /* ================= SCHEDULES ================= */
 async function loadSchedules() {
-  const res = await fetch(`${API}/schedules`);
+  const res = await fetch(`${API}/schedules`, { headers: getHeaders() });
   const schedules = await res.json();
 
   const tbody = document.getElementById("scheduleTable");
@@ -194,6 +322,8 @@ async function loadSchedules() {
       <td>${s.start_time}</td>
       <td>${s.duration_minutes}</td>
       <td>${s.enabled ? "✅" : "❌"}</td>
+      <td>${s.days_of_week || "*"}</td>
+      <td>${s.skip_if_moisture_over ? `skip ≥ ${s.skip_if_moisture_over} (last ${s.moisture_lookback_minutes}m)` : "-"}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -211,12 +341,15 @@ async function createSchedule() {
 
   await fetch(`${API}/schedules`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getHeaders() },
     body: JSON.stringify({
       zone_id: Number(zoneId),
       start_time: time,
       duration_minutes: Number(minutes),
-      enabled: true
+      enabled: document.getElementById("scheduleEnabled").checked,
+      days_of_week: document.getElementById("scheduleDays").value,
+      skip_if_moisture_over: document.getElementById("scheduleMoisture").value || null,
+      moisture_lookback_minutes: Number(document.getElementById("scheduleLookback").value)
     })
   });
 
@@ -224,7 +357,12 @@ async function createSchedule() {
 }
 
 /* ================= INIT ================= */
-loadZones().then(loadSchedules);
+document.getElementById("apiToken").value = localStorage.getItem(TOKEN_KEY) || "";
+initChartSelectors();
+loadZones().then(() => {
+  loadSchedules();
+  loadChartSeries();
+});
 loadRuns();
 setInterval(loadRuns, 10000);
 </script>
