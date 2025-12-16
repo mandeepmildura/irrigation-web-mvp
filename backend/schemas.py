@@ -84,6 +84,13 @@ class SensorReadingOut(BaseModel):
     class Config:
         from_attributes = True
 
+
+class ChartPoint(BaseModel):
+    ts: datetime
+    value: float
+    class Config:
+        from_attributes = True
+
 class RunOut(BaseModel):
     id: int
     zone_name: str

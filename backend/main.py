@@ -1,14 +1,19 @@
 import os
+import json
+import ssl
+import threading
 from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException, Security
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from zoneinfo import ZoneInfo
 import atexit
+
+import paho.mqtt.client as mqtt
 
 from db import Base, engine, get_db, SessionLocal
 import models, schemas
@@ -17,6 +22,18 @@ Base.metadata.create_all(bind=engine)
 
 API_TOKEN = os.getenv("API_TOKEN")
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
+MQTT_BROKER = os.getenv("MQTT_BROKER")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "8883"))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
+MQTT_TLS_ENV = os.getenv("MQTT_TLS")
+MQTT_TLS = (
+    MQTT_TLS_ENV.lower() in {"1", "true", "yes", "on"}
+    if MQTT_TLS_ENV is not None
+    else MQTT_PORT == 8883
+)
+MQTT_TOPIC_PREFIX = os.getenv("MQTT_TOPIC_PREFIX", "farm/irrigation").strip("/")
 
 app = FastAPI(title="Irrigation Web MVP")
 
@@ -161,6 +178,129 @@ def latest_readings(
         .all()
     )
 
+
+@app.get("/chart/series", response_model=list[schemas.ChartPoint])
+def chart_series(
+    zone_name: str,
+    metric: str,
+    hours: int = 24,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(require_api_key),
+):
+    if hours < 1:
+        raise HTTPException(status_code=400, detail="hours must be >= 1")
+    hours = min(hours, 168)
+    since = datetime.utcnow() - timedelta(hours=hours)
+    readings = (
+        db.query(models.SensorReading)
+        .filter(models.SensorReading.zone_name == zone_name)
+        .filter(models.SensorReading.metric == metric)
+        .filter(models.SensorReading.ts >= since)
+        .order_by(models.SensorReading.ts.asc())
+        .all()
+    )
+    return readings
+
+
+# ---------- MQTT ingestion ----------
+mqtt_client: mqtt.Client | None = None
+
+
+def _extract_topic_parts(topic: str) -> tuple[str | None, str | None]:
+    parts = [p for p in topic.split("/") if p]
+    prefix_parts = [p for p in MQTT_TOPIC_PREFIX.split("/") if p]
+    if prefix_parts and parts[: len(prefix_parts)] == prefix_parts:
+        parts = parts[len(prefix_parts) :]
+    if len(parts) < 2:
+        return None, None
+    return parts[-2], parts[-1]
+
+
+def _parse_ts(raw_ts) -> datetime:
+    if raw_ts is None:
+        return datetime.utcnow()
+    try:
+        if isinstance(raw_ts, (int, float)):
+            return datetime.utcfromtimestamp(raw_ts)
+        if isinstance(raw_ts, str):
+            normalized = raw_ts.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(normalized)
+            if parsed.tzinfo:
+                return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+            return parsed
+    except Exception:
+        pass
+    return datetime.utcnow()
+
+
+def _handle_mqtt_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage):
+    try:
+        zone_name, metric = _extract_topic_parts(msg.topic)
+        if not zone_name or not metric:
+            return
+
+        payload = json.loads(msg.payload.decode("utf-8"))
+        value = float(payload.get("value"))
+        ts = _parse_ts(payload.get("ts"))
+
+        db = SessionLocal()
+        try:
+            r = models.SensorReading(zone_name=zone_name, metric=metric, value=value, ts=ts)
+            db.add(r)
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        # Never crash the API due to MQTT ingestion errors
+        return
+
+
+def _schedule_reconnect(client: mqtt.Client, delay: int = 5):
+    def _attempt():
+        try:
+            client.reconnect()
+        except Exception:
+            _schedule_reconnect(client, min(delay * 2, 60))
+
+    threading.Timer(delay, _attempt).start()
+
+
+def _on_disconnect(client: mqtt.Client, userdata, rc):
+    if rc != 0:
+        _schedule_reconnect(client)
+
+
+def start_mqtt():
+    global mqtt_client
+    if not MQTT_BROKER:
+        return
+
+    mqtt_client = mqtt.Client()
+    if MQTT_USERNAME:
+        mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD or "")
+    if MQTT_TLS:
+        mqtt_client.tls_set(tls_version=ssl.PROTOCOL_TLS)
+
+    mqtt_client.on_message = _handle_mqtt_message
+
+    def _on_connect(client: mqtt.Client, userdata, flags, rc, properties=None):
+        if rc == 0:
+            topic = f"{MQTT_TOPIC_PREFIX}/+/+" if MQTT_TOPIC_PREFIX else "+/+"
+            client.subscribe(topic)
+        else:
+            _schedule_reconnect(client)
+
+    mqtt_client.on_connect = _on_connect
+    mqtt_client.on_disconnect = _on_disconnect
+    mqtt_client.reconnect_delay_set(min_delay=2, max_delay=30)
+
+    try:
+        mqtt_client.connect_async(MQTT_BROKER, MQTT_PORT, keepalive=60)
+        mqtt_client.loop_start()
+    except Exception:
+        # Keep the API healthy even if MQTT is misconfigured
+        mqtt_client = None
+
 # ---------- Scheduler (skip missed; never double-run within same minute) ----------
 scheduler = BackgroundScheduler(timezone="Australia/Melbourne")
 
@@ -223,6 +363,7 @@ def start_scheduler():
     if not scheduler.running:
         scheduler.add_job(schedule_tick, "interval", seconds=20)
         scheduler.start()
+    start_mqtt()
 
 atexit.register(lambda: scheduler.shutdown(wait=False))
 @app.get("/")

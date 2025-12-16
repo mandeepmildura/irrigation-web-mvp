@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>Irrigation Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
     body {
@@ -100,6 +101,19 @@
   <tbody id="scheduleTable"></tbody>
 </table>
 
+<!-- ================= CHARTS ================= -->
+<h2>📈 Charts</h2>
+<div class="card">
+  <strong>Sensor Series</strong><br/><br/>
+  <select id="chartZone"></select>
+  <select id="chartMetric"></select>
+  <select id="chartRange"></select>
+  <button onclick="loadChartSeries()">Load</button>
+</div>
+<div class="card">
+  <canvas id="chartCanvas" height="180"></canvas>
+</div>
+
 <!-- ================= RUN HISTORY ================= -->
 <h2>Recent Runs</h2>
 <table>
@@ -117,6 +131,9 @@
 <script>
 const API = "";
 const TOKEN_KEY = "irrigation_api_token";
+const METRICS = ["moisture", "temperature", "humidity", "pressure", "flow"];
+const RANGES = [6, 12, 24, 72, 168];
+let chartInstance = null;
 
 function getHeaders() {
   const token = localStorage.getItem(TOKEN_KEY) || "";
@@ -130,8 +147,12 @@ function setToken() {
   } else {
     localStorage.removeItem(TOKEN_KEY);
   }
-  loadZones().then(loadSchedules);
-  loadRuns();
+ loadZones().then(() => {
+  loadSchedules();
+  loadChartSeries();
+});
+loadRuns();
+
 }
 
 /* ================= TIME ================= */
@@ -158,9 +179,11 @@ async function loadZones() {
 
   const zonesDiv = document.getElementById("zones");
   const select = document.getElementById("scheduleZone");
+  const chartZone = document.getElementById("chartZone");
 
   zonesDiv.innerHTML = "";
   select.innerHTML = "";
+  chartZone.innerHTML = "";
 
   zonesCache.forEach(z => {
     // Zone card
@@ -179,6 +202,11 @@ async function loadZones() {
     opt.value = z.id;
     opt.textContent = z.name;
     select.appendChild(opt);
+
+    const chartOpt = document.createElement("option");
+    chartOpt.value = z.name;
+    chartOpt.textContent = z.name;
+    chartZone.appendChild(chartOpt);
   });
 }
 
@@ -208,6 +236,73 @@ async function loadRuns() {
       <td>${r.source}</td>
     `;
     tbody.appendChild(tr);
+  });
+}
+
+/* ================= CHARTS ================= */
+function initChartSelectors() {
+  const metricSelect = document.getElementById("chartMetric");
+  const rangeSelect = document.getElementById("chartRange");
+
+  metricSelect.innerHTML = "";
+  METRICS.forEach(m => {
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = m;
+    metricSelect.appendChild(opt);
+  });
+
+  rangeSelect.innerHTML = "";
+  RANGES.forEach(h => {
+    const opt = document.createElement("option");
+    opt.value = h;
+    opt.textContent = `${h}h`;
+    rangeSelect.appendChild(opt);
+  });
+  rangeSelect.value = 24;
+}
+
+async function loadChartSeries() {
+  const zone = document.getElementById("chartZone").value;
+  const metric = document.getElementById("chartMetric").value;
+  const hours = Number(document.getElementById("chartRange").value || 24);
+
+  if (!zone || !metric) {
+    return;
+  }
+
+  const res = await fetch(`${API}/chart/series?zone_name=${encodeURIComponent(zone)}&metric=${encodeURIComponent(metric)}&hours=${hours}`, { headers: getHeaders() });
+  const series = await res.json();
+
+  const labels = series.map(p => formatMelbourne(p.ts));
+  const values = series.map(p => p.value);
+
+  const ctx = document.getElementById("chartCanvas").getContext("2d");
+  if (chartInstance) {
+    chartInstance.destroy();
+  }
+
+  chartInstance = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: `${metric} (${zone})`,
+          data: values,
+          fill: false,
+          borderColor: "#2c7a7b",
+          tension: 0.2
+        }
+      ]
+    },
+    options: {
+      plugins: { legend: { display: true } },
+      scales: {
+        x: { display: true, ticks: { maxTicksLimit: 8 } },
+        y: { beginAtZero: false }
+      }
+    }
   });
 }
 
@@ -264,9 +359,17 @@ async function createSchedule() {
 
 /* ================= INIT ================= */
 document.getElementById("apiToken").value = localStorage.getItem(TOKEN_KEY) || "";
-loadZones().then(loadSchedules);
+
+initChartSelectors();
+
+loadZones().then(() => {
+  loadSchedules();
+  loadChartSeries();
+});
+
 loadRuns();
 setInterval(loadRuns, 10000);
+
 </script>
 
 </body>
