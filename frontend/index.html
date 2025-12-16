@@ -147,11 +147,12 @@ function setToken() {
   } else {
     localStorage.removeItem(TOKEN_KEY);
   }
-  loadZones().then(() => {
-    loadSchedules();
-    loadChartSeries();
-  });
-  loadRuns();
+ loadZones().then(() => {
+  loadSchedules();
+  loadChartSeries();
+});
+loadRuns();
+
 }
 
 /* ================= TIME ================= */
@@ -358,13 +359,17 @@ async function createSchedule() {
 
 /* ================= INIT ================= */
 document.getElementById("apiToken").value = localStorage.getItem(TOKEN_KEY) || "";
+
 initChartSelectors();
+
 loadZones().then(() => {
   loadSchedules();
   loadChartSeries();
 });
+
 loadRuns();
 setInterval(loadRuns, 10000);
+
 </script>
 
 </body>
