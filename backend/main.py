@@ -27,7 +27,12 @@ MQTT_BROKER = os.getenv("MQTT_BROKER")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "8883"))
 MQTT_USERNAME = os.getenv("MQTT_USERNAME")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
-MQTT_TLS = os.getenv("MQTT_TLS", "").lower() in {"1", "true", "yes", "on"}
+MQTT_TLS_ENV = os.getenv("MQTT_TLS")
+MQTT_TLS = (
+    MQTT_TLS_ENV.lower() in {"1", "true", "yes", "on"}
+    if MQTT_TLS_ENV is not None
+    else MQTT_PORT == 8883
+)
 MQTT_TOPIC_PREFIX = os.getenv("MQTT_TOPIC_PREFIX", "farm/irrigation").strip("/")
 
 app = FastAPI(title="Irrigation Web MVP")
