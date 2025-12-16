@@ -13,18 +13,19 @@ class ZoneOut(BaseModel):
     name: str
     description: str
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 # ---------- Schedules ----------
 class ScheduleCreate(BaseModel):
     zone_id: int
-    start_time: str = Field(..., regex=r"^\d{2}:\d{2}$")  # HH:MM
+    start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")  # HH:MM
     duration_minutes: int = Field(..., ge=1, le=1440)
     enabled: bool = True
 
-    # NEW / IMPORTANT
+    # irrigation logic
     days_of_week: str = "*"  # "*" or "mon,tue,wed"
     skip_if_moisture_over: float | None = None
     moisture_lookback_minutes: int = Field(default=120, ge=1, le=1440)
@@ -42,8 +43,9 @@ class ScheduleOut(BaseModel):
     moisture_lookback_minutes: int
     last_run_minute: str | None
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 # ---------- Sensor readings ----------
@@ -60,8 +62,9 @@ class SensorReadingOut(BaseModel):
     value: float
     ts: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 # ---------- Irrigation runs ----------
@@ -72,5 +75,6 @@ class RunOut(BaseModel):
     source: str
     ts: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
