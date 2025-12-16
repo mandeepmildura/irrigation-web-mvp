@@ -1,375 +1,560 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Irrigation Dashboard</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Irrigation Web MVP</title>
+
+  <!-- prevent stale caching while you're iterating -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 24px;
-    }
-
-    h1, h2 {
-      margin-top: 30px;
-    }
-
-    .zone, .card {
-      border: 1px solid #ddd;
-      padding: 12px;
-      margin-bottom: 16px;
-      border-radius: 6px;
-    }
-
-    button {
-      margin-right: 6px;
-      padding: 6px 10px;
-      cursor: pointer;
-    }
-
-    input, select {
-      padding: 6px;
-      margin-right: 6px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 12px;
-    }
-
-    th, td {
-      border-bottom: 1px solid #ddd;
-      padding: 8px;
-      text-align: left;
-    }
-
-    th {
-      background: #f4f4f4;
-    }
+    :root { --bg:#0b1020; --card:#121a33; --text:#e8ecff; --muted:#a9b3da; --line:#27325b; --btn:#2e5bff; --btn2:#1d2a52; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:var(--text); }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 18px; }
+    h1 { margin: 8px 0 14px; font-size: 24px; }
+    h2 { margin: 0 0 12px; font-size: 16px; color: var(--text); }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: 0 8px 26px rgba(0,0,0,.25); }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .row > * { flex: 0 0 auto; }
+    label { font-size: 12px; color: var(--muted); display:block; margin-bottom: 6px; }
+    input, select { width: 100%; padding: 10px 10px; border-radius: 10px; border:1px solid var(--line); background:#0c132b; color: var(--text); }
+    .field { min-width: 180px; }
+    .field.small { min-width: 120px; }
+    .field.wide { min-width: 260px; flex: 1 1 auto; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--btn); color:white; cursor:pointer; font-weight: 650; }
+    button.secondary { background: var(--btn2); }
+    button:disabled { opacity: .5; cursor:not-allowed; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid var(--line); color: var(--text); text-align:left; }
+    th { color: var(--muted); font-weight: 600; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .pill { display:inline-block; font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+    .ok { color: #7dffb3; }
+    .bad { color: #ff7d7d; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    canvas { background: #0c132b; border-radius: 14px; border: 1px solid var(--line); }
+    .full { grid-column: 1 / -1; }
   </style>
 </head>
+
 <body>
+  <div class="wrap">
+    <h1>Irrigation Web MVP</h1>
 
-<h1>🌱 Irrigation Dashboard</h1>
+    <div class="card">
+      <h2>Connection</h2>
+      <div class="row">
+        <div class="field wide">
+          <label>API Key (optional)</label>
+          <input id="apiToken" placeholder="Enter API key if enabled" />
+        </div>
+        <div class="field small">
+          <label>&nbsp;</label>
+          <button class="secondary" onclick="saveToken()">Save</button>
+        </div>
+        <div class="field small">
+          <label>&nbsp;</label>
+          <button class="secondary" onclick="refreshAll()">Refresh</button>
+        </div>
+        <div class="field wide">
+          <label>Status</label>
+          <div id="status" class="muted">Not checked yet.</div>
+        </div>
+      </div>
+    </div>
 
-<div class="card">
-  <strong>API Access</strong><br/><br/>
-  <label>API Key: <input type="password" id="apiToken" placeholder="X-API-Key value" /></label>
-  <button onclick="setToken()">Save</button>
-</div>
+    <div class="grid" style="margin-top:14px;">
 
-<!-- ================= ZONES ================= -->
-<h2>Zones</h2>
-<div id="zones"></div>
+      <!-- Zones -->
+      <div class="card">
+        <h2>Zones</h2>
 
-<!-- ============== SCHEDULE EDITOR ============== -->
-<h2>📅 Schedules</h2>
+        <div class="row">
+          <div class="field wide">
+            <label>Zone Name</label>
+            <input id="zoneName" placeholder="e.g. Block 2" />
+          </div>
+          <div class="field wide">
+            <label>Description</label>
+            <input id="zoneDesc" placeholder="optional" />
+          </div>
+          <div class="field small">
+            <label>&nbsp;</label>
+            <button onclick="createZone()">Create</button>
+          </div>
+        </div>
 
-<div class="card">
-  <strong>Create Schedule</strong><br/><br/>
+        <div style="margin-top:12px; overflow:auto; max-height: 280px;">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Name</th><th>Description</th></tr>
+            </thead>
+            <tbody id="zonesTable"></tbody>
+          </table>
+        </div>
 
-  <select id="scheduleZone"></select>
+        <div class="muted" id="zonesNote" style="margin-top:10px;"></div>
+      </div>
 
-  <input type="time" id="scheduleTime" />
+      <!-- Schedules -->
+      <div class="card">
+        <h2>Schedules</h2>
 
-  <input type="number" id="scheduleMinutes" value="10" min="1" />
+        <div class="row">
+          <div class="field wide">
+            <label>Zone</label>
+            <select id="schedZone"></select>
+          </div>
 
-  <input type="text" id="scheduleDays" placeholder="mon,wed,fri or *" value="*" />
+          <div class="field small">
+            <label>Start (HH:MM)</label>
+            <input id="schedTime" placeholder="06:30" value="06:30" />
+          </div>
 
-  <input type="number" id="scheduleMoisture" placeholder=">= moisture skip" step="0.1" min="0" />
+          <div class="field small">
+            <label>Minutes</label>
+            <input id="schedMinutes" type="number" min="1" max="1440" value="10" />
+          </div>
 
-  <input type="number" id="scheduleLookback" value="120" min="15" max="1440" />
+          <div class="field small">
+            <label>Enabled</label>
+            <select id="schedEnabled">
+              <option value="true" selected>true</option>
+              <option value="false">false</option>
+            </select>
+          </div>
+        </div>
 
-  <label><input type="checkbox" id="scheduleEnabled" checked /> Enabled</label>
+        <div class="row" style="margin-top:8px;">
+          <div class="field wide">
+            <label>Allowed days (e.g. *, mon,tue,wed)</label>
+            <input id="schedDays" placeholder="*" value="*" />
+          </div>
 
-  <button onclick="createSchedule()">Add</button>
-</div>
+          <div class="field small">
+            <label>Skip if moisture over</label>
+            <input id="schedSkipMoist" type="number" step="0.1" placeholder="(optional)" />
+          </div>
 
-<table>
-  <thead>
-    <tr>
-      <th>Zone</th>
-      <th>Start Time</th>
-      <th>Minutes</th>
-      <th>Enabled</th>
-      <th>Days</th>
-      <th>Moisture rule</th>
-    </tr>
-  </thead>
-  <tbody id="scheduleTable"></tbody>
-</table>
+          <div class="field small">
+            <label>Lookback (minutes)</label>
+            <input id="schedLookback" type="number" min="1" max="1440" value="120" />
+          </div>
 
-<!-- ================= CHARTS ================= -->
-<h2>📈 Charts</h2>
-<div class="card">
-  <strong>Sensor Series</strong><br/><br/>
-  <select id="chartZone"></select>
-  <select id="chartMetric"></select>
-  <select id="chartRange"></select>
-  <button onclick="loadChartSeries()">Load</button>
-</div>
-<div class="card">
-  <canvas id="chartCanvas" height="180"></canvas>
-</div>
+          <div class="field small">
+            <label>&nbsp;</label>
+            <button onclick="createSchedule()">Create</button>
+          </div>
+        </div>
 
-<!-- ================= RUN HISTORY ================= -->
-<h2>Recent Runs</h2>
-<table>
-  <thead>
-    <tr>
-      <th>Time (Melbourne)</th>
-      <th>Zone</th>
-      <th>Minutes</th>
-      <th>Source</th>
-    </tr>
-  </thead>
-  <tbody id="runs"></tbody>
-</table>
+        <div style="margin-top:12px; overflow:auto; max-height: 280px;">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>Zone</th><th>Start</th><th>Min</th><th>Days</th><th>Skip&gt;</th><th>Lookback</th><th>Enabled</th><th>Last</th>
+              </tr>
+            </thead>
+            <tbody id="schedulesTable"></tbody>
+          </table>
+        </div>
+
+        <div class="muted" id="schedNote" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- Manual Run -->
+      <div class="card">
+        <h2>Manual Run</h2>
+        <div class="row">
+          <div class="field wide">
+            <label>Zone</label>
+            <select id="runZone"></select>
+          </div>
+          <div class="field small">
+            <label>Minutes</label>
+            <input id="runMinutes" type="number" min="1" max="240" value="1" />
+          </div>
+          <div class="field small">
+            <label>&nbsp;</label>
+            <button onclick="manualRun()">Run now</button>
+          </div>
+        </div>
+        <div class="muted" id="runNote" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- Charts -->
+      <div class="card">
+        <h2>Charts</h2>
+
+        <div class="row">
+          <div class="field wide">
+            <label>Zone</label>
+            <select id="chartZone"></select>
+          </div>
+
+          <div class="field small">
+            <label>Metric</label>
+            <select id="chartMetric">
+              <option value="moisture" selected>moisture</option>
+              <option value="temperature">temperature</option>
+              <option value="humidity">humidity</option>
+              <option value="pressure">pressure</option>
+              <option value="flow">flow</option>
+            </select>
+          </div>
+
+          <div class="field small">
+            <label>Hours</label>
+            <select id="chartHours">
+              <option value="6">6</option>
+              <option value="12">12</option>
+              <option value="24" selected>24</option>
+              <option value="72">72</option>
+              <option value="168">168</option>
+            </select>
+          </div>
+
+          <div class="field small">
+            <label>&nbsp;</label>
+            <button onclick="loadChartSeries()">Load</button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <canvas id="chartCanvas" height="140"></canvas>
+          <div class="muted" id="chartNote" style="margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <!-- Recent Runs -->
+      <div class="card full">
+        <h2>Recent Runs</h2>
+        <div class="row">
+          <span class="pill">Auto refresh: 10s</span>
+          <span id="runsCount" class="pill"></span>
+        </div>
+
+        <div style="margin-top:10px; overflow:auto; max-height: 340px;">
+          <table>
+            <thead>
+              <tr><th>Time (UTC)</th><th>Zone</th><th>Min</th><th>Source</th></tr>
+            </thead>
+            <tbody id="runsTable"></tbody>
+          </table>
+        </div>
+
+        <div class="muted" id="runsNote" style="margin-top:10px;"></div>
+      </div>
+
+    </div>
+  </div>
 
 <script>
-const API = "";
-const TOKEN_KEY = "irrigation_api_token";
-const METRICS = ["moisture", "temperature", "humidity", "pressure", "flow"];
-const RANGES = [6, 12, 24, 72, 168];
-let chartInstance = null;
+  const TOKEN_KEY = "irrigation_api_key";
+  let chartInstance = null;
 
-function getHeaders() {
-  const token = localStorage.getItem(TOKEN_KEY) || "";
-  return token ? { "X-API-Key": token } : {};
-}
+  function apiHeaders() {
+    const token = (document.getElementById("apiToken")?.value || "").trim();
+    const h = { "Content-Type": "application/json" };
+    if (token) h["x-api-key"] = token;
+    return h;
+  }
 
-function setToken() {
-  const token = document.getElementById("apiToken").value.trim();
-  if (token) {
+  function saveToken() {
+    const token = (document.getElementById("apiToken").value || "").trim();
     localStorage.setItem(TOKEN_KEY, token);
-  } else {
-    localStorage.removeItem(TOKEN_KEY);
-  }
- loadZones().then(() => {
-  loadSchedules();
-  loadChartSeries();
-});
-loadRuns();
-
-}
-
-/* ================= TIME ================= */
-function formatMelbourne(ts) {
-  const iso = ts.endsWith("Z") ? ts : ts + "Z";
-  return new Intl.DateTimeFormat("en-AU", {
-    timeZone: "Australia/Melbourne",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false
-  }).format(new Date(iso));
-}
-
-/* ================= ZONES ================= */
-let zonesCache = [];
-
-async function loadZones() {
-  const res = await fetch(`${API}/zones`, { headers: getHeaders() });
-  zonesCache = await res.json();
-
-  const zonesDiv = document.getElementById("zones");
-  const select = document.getElementById("scheduleZone");
-  const chartZone = document.getElementById("chartZone");
-
-  zonesDiv.innerHTML = "";
-  select.innerHTML = "";
-  chartZone.innerHTML = "";
-
-  zonesCache.forEach(z => {
-    // Zone card
-    const div = document.createElement("div");
-    div.className = "zone";
-    div.innerHTML = `
-      <strong>${z.name}</strong><br/><br/>
-      <button onclick="runZone('${z.name}',1)">Run 1 min</button>
-      <button onclick="runZone('${z.name}',5)">Run 5 min</button>
-      <button onclick="runZone('${z.name}',10)">Run 10 min</button>
-    `;
-    zonesDiv.appendChild(div);
-
-    // Schedule dropdown
-    const opt = document.createElement("option");
-    opt.value = z.id;
-    opt.textContent = z.name;
-    select.appendChild(opt);
-
-    const chartOpt = document.createElement("option");
-    chartOpt.value = z.name;
-    chartOpt.textContent = z.name;
-    chartZone.appendChild(chartOpt);
-  });
-}
-
-/* ================= MANUAL RUN ================= */
-async function runZone(zone, minutes) {
-  await fetch(`${API}/run/${encodeURIComponent(zone)}?minutes=${minutes}`, {
-    method: "POST",
-    headers: getHeaders()
-  });
-  setTimeout(loadRuns, 500);
-}
-
-/* ================= RUN HISTORY ================= */
-async function loadRuns() {
-  const res = await fetch(`${API}/runs?limit=20`, { headers: getHeaders() });
-  const runs = await res.json();
-
-  const tbody = document.getElementById("runs");
-  tbody.innerHTML = "";
-
-  runs.forEach(r => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${formatMelbourne(r.ts)}</td>
-      <td>${r.zone_name}</td>
-      <td>${r.duration_minutes}</td>
-      <td>${r.source}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-/* ================= CHARTS ================= */
-function initChartSelectors() {
-  const metricSelect = document.getElementById("chartMetric");
-  const rangeSelect = document.getElementById("chartRange");
-
-  metricSelect.innerHTML = "";
-  METRICS.forEach(m => {
-    const opt = document.createElement("option");
-    opt.value = m;
-    opt.textContent = m;
-    metricSelect.appendChild(opt);
-  });
-
-  rangeSelect.innerHTML = "";
-  RANGES.forEach(h => {
-    const opt = document.createElement("option");
-    opt.value = h;
-    opt.textContent = `${h}h`;
-    rangeSelect.appendChild(opt);
-  });
-  rangeSelect.value = 24;
-}
-
-async function loadChartSeries() {
-  const zone = document.getElementById("chartZone").value;
-  const metric = document.getElementById("chartMetric").value;
-  const hours = Number(document.getElementById("chartRange").value || 24);
-
-  if (!zone || !metric) {
-    return;
+    setStatus(token ? "Saved API key." : "Cleared API key.");
   }
 
-  const res = await fetch(`${API}/chart/series?zone_name=${encodeURIComponent(zone)}&metric=${encodeURIComponent(metric)}&hours=${hours}`, { headers: getHeaders() });
-  const series = await res.json();
-
-  const labels = series.map(p => formatMelbourne(p.ts));
-  const values = series.map(p => p.value);
-
-  const ctx = document.getElementById("chartCanvas").getContext("2d");
-  if (chartInstance) {
-    chartInstance.destroy();
+  function setStatus(msg, isError=false) {
+    const el = document.getElementById("status");
+    el.textContent = msg;
+    el.className = "muted " + (isError ? "bad" : "ok");
   }
 
-  chartInstance = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: `${metric} (${zone})`,
-          data: values,
-          fill: false,
-          borderColor: "#2c7a7b",
-          tension: 0.2
-        }
-      ]
-    },
-    options: {
-      plugins: { legend: { display: true } },
-      scales: {
-        x: { display: true, ticks: { maxTicksLimit: 8 } },
-        y: { beginAtZero: false }
-      }
+  async function apiGet(path) {
+    const resp = await fetch(path, { headers: apiHeaders() });
+    if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+    return await resp.json();
+  }
+
+  async function apiPost(path, body) {
+    const resp = await fetch(path, {
+      method: "POST",
+      headers: apiHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error(`${resp.status} ${resp.statusText} - ${txt}`);
     }
-  });
-}
-
-/* ================= SCHEDULES ================= */
-async function loadSchedules() {
-  const res = await fetch(`${API}/schedules`, { headers: getHeaders() });
-  const schedules = await res.json();
-
-  const tbody = document.getElementById("scheduleTable");
-  tbody.innerHTML = "";
-
-  schedules.forEach(s => {
-    const zone = zonesCache.find(z => z.id === s.zone_id);
-    const tr = document.createElement("tr");
-
-    tr.innerHTML = `
-      <td>${zone ? zone.name : s.zone_id}</td>
-      <td>${s.start_time}</td>
-      <td>${s.duration_minutes}</td>
-      <td>${s.enabled ? "✅" : "❌"}</td>
-      <td>${s.days_of_week || "*"}</td>
-      <td>${s.skip_if_moisture_over ? `skip ≥ ${s.skip_if_moisture_over} (last ${s.moisture_lookback_minutes}m)` : "-"}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-async function createSchedule() {
-  const zoneId = document.getElementById("scheduleZone").value;
-  const time = document.getElementById("scheduleTime").value;
-  const minutes = document.getElementById("scheduleMinutes").value;
-
-  if (!time) {
-    alert("Select start time");
-    return;
+    return await resp.json();
   }
 
-  await fetch(`${API}/schedules`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getHeaders() },
-    body: JSON.stringify({
-      zone_id: Number(zoneId),
-      start_time: time,
-      duration_minutes: Number(minutes),
-      enabled: document.getElementById("scheduleEnabled").checked,
-      days_of_week: document.getElementById("scheduleDays").value,
-      skip_if_moisture_over: document.getElementById("scheduleMoisture").value || null,
-      moisture_lookback_minutes: Number(document.getElementById("scheduleLookback").value)
-    })
-  });
+  async function checkHealth() {
+    try {
+      const j = await apiGet("/health");
+      setStatus(`OK. db_ready=${j.db_ready} | ${j.ts}`);
+    } catch (e) {
+      setStatus(`Health failed: ${e.message}`, true);
+    }
+  }
 
-  loadSchedules();
-}
+  async function loadZones() {
+    const zones = await apiGet("/zones");
+    const tbody = document.getElementById("zonesTable");
+    tbody.innerHTML = "";
 
-/* ================= INIT ================= */
-document.getElementById("apiToken").value = localStorage.getItem(TOKEN_KEY) || "";
+    for (const z of zones) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${z.id}</td><td>${escapeHtml(z.name)}</td><td>${escapeHtml(z.description || "")}</td>`;
+      tbody.appendChild(tr);
+    }
 
-initChartSelectors();
+    document.getElementById("zonesNote").textContent =
+      zones.length ? `${zones.length} zone(s).` : "No zones yet. Create one.";
 
-loadZones().then(() => {
-  loadSchedules();
-  loadChartSeries();
-});
+    // Populate selects
+    const schedSel = document.getElementById("schedZone");
+    const runSel = document.getElementById("runZone");
+    const chartSel = document.getElementById("chartZone");
 
-loadRuns();
-setInterval(loadRuns, 10000);
+    for (const sel of [schedSel, runSel, chartSel]) {
+      const current = sel.value;
+      sel.innerHTML = "";
+      for (const z of zones) {
+        const opt = document.createElement("option");
+        opt.value = z.id;
+        opt.textContent = z.name;
+        opt.dataset.name = z.name;
+        sel.appendChild(opt);
+      }
+      // restore selection if possible
+      if (current) sel.value = current;
+    }
+  }
 
+  async function createZone() {
+    const name = (document.getElementById("zoneName").value || "").trim();
+    const description = (document.getElementById("zoneDesc").value || "").trim();
+    if (!name) return alert("Zone name required.");
+
+    try {
+      await apiPost("/zones", { name, description });
+      document.getElementById("zoneName").value = "";
+      document.getElementById("zoneDesc").value = "";
+      await loadZones();
+      await loadSchedules();
+      setStatus("Zone created.");
+    } catch (e) {
+      setStatus(`Create zone failed: ${e.message}`, true);
+      alert(e.message);
+    }
+  }
+
+  async function loadSchedules() {
+    const schedules = await apiGet("/schedules");
+    const zones = await apiGet("/zones");
+    const zoneById = {};
+    zones.forEach(z => zoneById[z.id] = z.name);
+
+    const tbody = document.getElementById("schedulesTable");
+    tbody.innerHTML = "";
+
+    for (const s of schedules) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${s.id}</td>
+        <td>${escapeHtml(zoneById[s.zone_id] || ("#" + s.zone_id))}</td>
+        <td class="mono">${escapeHtml(s.start_time)}</td>
+        <td>${s.duration_minutes}</td>
+        <td>${escapeHtml(s.days_of_week ?? "*")}</td>
+        <td>${(s.skip_if_moisture_over ?? "")}</td>
+        <td>${s.moisture_lookback_minutes ?? ""}</td>
+        <td>${s.enabled}</td>
+        <td class="mono">${escapeHtml(s.last_run_minute ?? "")}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById("schedNote").textContent =
+      schedules.length ? `${schedules.length} schedule(s).` : "No schedules yet.";
+  }
+
+  async function createSchedule() {
+    const zoneId = parseInt(document.getElementById("schedZone").value, 10);
+    if (!zoneId) return alert("Create a zone first.");
+
+    const start_time = (document.getElementById("schedTime").value || "").trim();
+    const duration_minutes = parseInt(document.getElementById("schedMinutes").value, 10);
+    const enabled = (document.getElementById("schedEnabled").value === "true");
+
+    const days_of_week = (document.getElementById("schedDays").value || "*").trim() || "*";
+    const skipRaw = (document.getElementById("schedSkipMoist").value || "").trim();
+    const skip_if_moisture_over = skipRaw ? parseFloat(skipRaw) : null;
+    const moisture_lookback_minutes = parseInt(document.getElementById("schedLookback").value, 10) || 120;
+
+    try {
+      await apiPost("/schedules", {
+        zone_id: zoneId,
+        start_time,
+        duration_minutes,
+        enabled,
+        days_of_week,
+        skip_if_moisture_over,
+        moisture_lookback_minutes
+      });
+      await loadSchedules();
+      setStatus("Schedule created.");
+    } catch (e) {
+      setStatus(`Create schedule failed: ${e.message}`, true);
+      alert(e.message);
+    }
+  }
+
+  async function manualRun() {
+    const zoneId = parseInt(document.getElementById("runZone").value, 10);
+    const minutes = parseInt(document.getElementById("runMinutes").value, 10) || 1;
+
+    // Find the selected option's display text (zone name)
+    const sel = document.getElementById("runZone");
+    const zoneName = sel.options[sel.selectedIndex]?.textContent;
+
+    if (!zoneName) return alert("Select a zone first.");
+
+    try {
+      const url = `/run/${encodeURIComponent(zoneName)}?minutes=${minutes}&source=manual`;
+      const resp = await fetch(url, { method: "POST", headers: apiHeaders() });
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`${resp.status} ${resp.statusText} - ${txt}`);
+      }
+      const j = await resp.json();
+      document.getElementById("runNote").textContent =
+        `Run logged: ${j.zone_name} for ${j.duration_minutes} min (${j.source})`;
+      await loadRuns();
+      setStatus("Manual run logged.");
+    } catch (e) {
+      setStatus(`Manual run failed: ${e.message}`, true);
+      alert(e.message);
+    }
+  }
+
+  async function loadRuns() {
+    try {
+      const runs = await apiGet("/runs?limit=100");
+      const tbody = document.getElementById("runsTable");
+      tbody.innerHTML = "";
+
+      for (const r of runs) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono">${escapeHtml((r.ts || "").replace("T"," ").replace("Z",""))}</td>
+          <td>${escapeHtml(r.zone_name)}</td>
+          <td>${r.duration_minutes}</td>
+          <td class="mono">${escapeHtml(r.source)}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      document.getElementById("runsCount").textContent = `${runs.length} rows`;
+      document.getElementById("runsNote").textContent = runs.length ? "" : "No runs yet.";
+    } catch (e) {
+      document.getElementById("runsNote").textContent = `Failed to load runs: ${e.message}`;
+    }
+  }
+
+  // ✅ FIXED: uses backend shape {labels:[], values:[]}
+  async function loadChartSeries() {
+    const zoneSel = document.getElementById("chartZone");
+    const zoneName = zoneSel.options[zoneSel.selectedIndex]?.textContent;
+    const metric = document.getElementById("chartMetric").value;
+    const hours = document.getElementById("chartHours").value;
+
+    if (!zoneName) {
+      document.getElementById("chartNote").textContent = "Create a zone first.";
+      return;
+    }
+
+    const url = `/chart/series?zone_name=${encodeURIComponent(zoneName)}&metric=${encodeURIComponent(metric)}&hours=${hours}`;
+
+    try {
+      const resp = await fetch(url, { headers: apiHeaders() });
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`${resp.status} ${resp.statusText} - ${txt}`);
+      }
+
+      const data = await resp.json();
+      const labels = Array.isArray(data.labels) ? data.labels : [];
+      const values = Array.isArray(data.values) ? data.values : [];
+
+      document.getElementById("chartNote").textContent =
+        values.length ? `Loaded ${values.length} point(s).` : "No data points for that selection.";
+
+      const ctx = document.getElementById("chartCanvas").getContext("2d");
+
+      if (!chartInstance) {
+        chartInstance = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: labels,
+            datasets: [{
+              label: `${zoneName} - ${metric}`,
+              data: values,
+              borderWidth: 2,
+              pointRadius: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: true } },
+            scales: {
+              x: { ticks: { maxTicksLimit: 10 } }
+            }
+          }
+        });
+      } else {
+        chartInstance.data.labels = labels;
+        chartInstance.data.datasets[0].label = `${zoneName} - ${metric}`;
+        chartInstance.data.datasets[0].data = values;
+        chartInstance.update();
+      }
+    } catch (e) {
+      document.getElementById("chartNote").textContent = `Chart load failed: ${e.message}`;
+      console.error(e);
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  async function refreshAll() {
+    await checkHealth();
+    await loadZones();
+    await loadSchedules();
+    await loadRuns();
+    // don’t auto-load chart; user clicks Load
+  }
+
+  // init
+  (function init() {
+    document.getElementById("apiToken").value = localStorage.getItem(TOKEN_KEY) || "";
+    refreshAll();
+    setInterval(loadRuns, 10000);
+  })();
 </script>
 
 </body>
