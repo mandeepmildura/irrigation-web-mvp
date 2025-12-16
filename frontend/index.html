@@ -53,6 +53,12 @@
 
 <h1>🌱 Irrigation Dashboard</h1>
 
+<div class="card">
+  <strong>API Access</strong><br/><br/>
+  <label>API Key: <input type="password" id="apiToken" placeholder="X-API-Key value" /></label>
+  <button onclick="setToken()">Save</button>
+</div>
+
 <!-- ================= ZONES ================= -->
 <h2>Zones</h2>
 <div id="zones"></div>
@@ -69,6 +75,14 @@
 
   <input type="number" id="scheduleMinutes" value="10" min="1" />
 
+  <input type="text" id="scheduleDays" placeholder="mon,wed,fri or *" value="*" />
+
+  <input type="number" id="scheduleMoisture" placeholder=">= moisture skip" step="0.1" min="0" />
+
+  <input type="number" id="scheduleLookback" value="120" min="15" max="1440" />
+
+  <label><input type="checkbox" id="scheduleEnabled" checked /> Enabled</label>
+
   <button onclick="createSchedule()">Add</button>
 </div>
 
@@ -79,6 +93,8 @@
       <th>Start Time</th>
       <th>Minutes</th>
       <th>Enabled</th>
+      <th>Days</th>
+      <th>Moisture rule</th>
     </tr>
   </thead>
   <tbody id="scheduleTable"></tbody>
@@ -100,6 +116,23 @@
 
 <script>
 const API = "";
+const TOKEN_KEY = "irrigation_api_token";
+
+function getHeaders() {
+  const token = localStorage.getItem(TOKEN_KEY) || "";
+  return token ? { "X-API-Key": token } : {};
+}
+
+function setToken() {
+  const token = document.getElementById("apiToken").value.trim();
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token);
+  } else {
+    localStorage.removeItem(TOKEN_KEY);
+  }
+  loadZones().then(loadSchedules);
+  loadRuns();
+}
 
 /* ================= TIME ================= */
 function formatMelbourne(ts) {
@@ -120,7 +153,7 @@ function formatMelbourne(ts) {
 let zonesCache = [];
 
 async function loadZones() {
-  const res = await fetch(`${API}/zones`);
+  const res = await fetch(`${API}/zones`, { headers: getHeaders() });
   zonesCache = await res.json();
 
   const zonesDiv = document.getElementById("zones");
@@ -152,14 +185,15 @@ async function loadZones() {
 /* ================= MANUAL RUN ================= */
 async function runZone(zone, minutes) {
   await fetch(`${API}/run/${encodeURIComponent(zone)}?minutes=${minutes}`, {
-    method: "POST"
+    method: "POST",
+    headers: getHeaders()
   });
   setTimeout(loadRuns, 500);
 }
 
 /* ================= RUN HISTORY ================= */
 async function loadRuns() {
-  const res = await fetch(`${API}/runs?limit=20`);
+  const res = await fetch(`${API}/runs?limit=20`, { headers: getHeaders() });
   const runs = await res.json();
 
   const tbody = document.getElementById("runs");
@@ -179,7 +213,7 @@ async function loadRuns() {
 
 /* ================= SCHEDULES ================= */
 async function loadSchedules() {
-  const res = await fetch(`${API}/schedules`);
+  const res = await fetch(`${API}/schedules`, { headers: getHeaders() });
   const schedules = await res.json();
 
   const tbody = document.getElementById("scheduleTable");
@@ -194,6 +228,8 @@ async function loadSchedules() {
       <td>${s.start_time}</td>
       <td>${s.duration_minutes}</td>
       <td>${s.enabled ? "✅" : "❌"}</td>
+      <td>${s.days_of_week || "*"}</td>
+      <td>${s.skip_if_moisture_over ? `skip ≥ ${s.skip_if_moisture_over} (last ${s.moisture_lookback_minutes}m)` : "-"}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -211,12 +247,15 @@ async function createSchedule() {
 
   await fetch(`${API}/schedules`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getHeaders() },
     body: JSON.stringify({
       zone_id: Number(zoneId),
       start_time: time,
       duration_minutes: Number(minutes),
-      enabled: true
+      enabled: document.getElementById("scheduleEnabled").checked,
+      days_of_week: document.getElementById("scheduleDays").value,
+      skip_if_moisture_over: document.getElementById("scheduleMoisture").value || null,
+      moisture_lookback_minutes: Number(document.getElementById("scheduleLookback").value)
     })
   });
 
@@ -224,6 +263,7 @@ async function createSchedule() {
 }
 
 /* ================= INIT ================= */
+document.getElementById("apiToken").value = localStorage.getItem(TOKEN_KEY) || "";
 loadZones().then(loadSchedules);
 loadRuns();
 setInterval(loadRuns, 10000);
