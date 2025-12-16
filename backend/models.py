@@ -27,6 +27,9 @@ class Schedule(Base):
     start_time: Mapped[str] = mapped_column(String)          # "HH:MM"
     duration_minutes: Mapped[int] = mapped_column(Integer)
     enabled: Mapped[int] = mapped_column(Integer, default=1)
+    days_of_week: Mapped[str] = mapped_column(String, default="*")  # comma of mon,tue...
+    skip_if_moisture_over: Mapped[float | None] = mapped_column(Float, nullable=True)
+    moisture_lookback_minutes: Mapped[int] = mapped_column(Integer, default=120)
 
     # ✅ IMPORTANT: prevents missed or duplicate runs
     last_run_minute: Mapped[str | None] = mapped_column(String, nullable=True)
