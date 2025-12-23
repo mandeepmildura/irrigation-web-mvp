@@ -1,15 +1,14 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import os
 
 from db import Base, engine, get_db
 import models
-
-# -------------------------------------------------------------------
-# APP SETUP
-# -------------------------------------------------------------------
 
 app = FastAPI(title="Irrigation Web MVP")
 
@@ -25,9 +24,21 @@ Base.metadata.create_all(bind=engine)
 
 LOCAL_TZ = ZoneInfo("Australia/Melbourne")
 
-# -------------------------------------------------------------------
+# -------------------------------------------------
+# SERVE FRONTEND
+# -------------------------------------------------
+
+FRONTEND_DIR = "frontend"
+
+app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
+
+@app.get("/")
+def root():
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+# -------------------------------------------------
 # HEALTH
-# -------------------------------------------------------------------
+# -------------------------------------------------
 
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
@@ -37,9 +48,9 @@ def health(db: Session = Depends(get_db)):
         "ts": datetime.now(LOCAL_TZ).isoformat()
     }
 
-# -------------------------------------------------------------------
-# ADMIN – RESET SCHEDULES (THIS IS THE ONLY NEW LOGIC)
-# -------------------------------------------------------------------
+# -------------------------------------------------
+# ADMIN
+# -------------------------------------------------
 
 @app.delete("/admin/schedules")
 def reset_schedules(db: Session = Depends(get_db)):
@@ -47,9 +58,9 @@ def reset_schedules(db: Session = Depends(get_db)):
     db.commit()
     return {"ok": True, "deleted": deleted}
 
-# -------------------------------------------------------------------
+# -------------------------------------------------
 # ZONES
-# -------------------------------------------------------------------
+# -------------------------------------------------
 
 @app.post("/zones")
 def create_zone(name: str, description: str = "", db: Session = Depends(get_db)):
@@ -63,14 +74,14 @@ def create_zone(name: str, description: str = "", db: Session = Depends(get_db))
 def list_zones(db: Session = Depends(get_db)):
     return db.query(models.Zone).all()
 
-# -------------------------------------------------------------------
-# SCHEDULES (SIMPLE + CLEAN)
-# -------------------------------------------------------------------
+# -------------------------------------------------
+# SCHEDULES
+# -------------------------------------------------
 
 @app.post("/schedules")
 def create_schedule(
     zone_id: int,
-    start: str,          # "06:30"
+    start: str,
     minutes: int,
     days: str = "*",
     enabled: bool = True,
@@ -92,9 +103,9 @@ def create_schedule(
 def list_schedules(db: Session = Depends(get_db)):
     return db.query(models.Schedule).all()
 
-# -------------------------------------------------------------------
+# -------------------------------------------------
 # MANUAL RUN
-# -------------------------------------------------------------------
+# -------------------------------------------------
 
 @app.post("/run")
 def manual_run(zone_id: int, minutes: int, db: Session = Depends(get_db)):
@@ -109,9 +120,9 @@ def manual_run(zone_id: int, minutes: int, db: Session = Depends(get_db)):
     db.refresh(r)
     return r
 
-# -------------------------------------------------------------------
+# -------------------------------------------------
 # RUN HISTORY
-# -------------------------------------------------------------------
+# -------------------------------------------------
 
 @app.get("/runs")
 def list_runs(db: Session = Depends(get_db)):
