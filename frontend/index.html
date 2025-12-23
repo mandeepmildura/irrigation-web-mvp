@@ -4,125 +4,114 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Irrigation Web MVP</title>
-
-  <!-- prevent stale caching while you're iterating -->
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <style>
-    :root { --bg:#0b1020; --card:#121a33; --text:#e8ecff; --muted:#a9b3da; --line:#27325b; --btn:#2e5bff; --btn2:#1d2a52; }
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:var(--text); }
-    .wrap { max-width: 1100px; margin: 0 auto; padding: 18px; }
-    h1 { margin: 8px 0 14px; font-size: 24px; }
-    h2 { margin: 0 0 12px; font-size: 16px; color: var(--text); }
-    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .card { background:var(--card); border:1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: 0 8px 26px rgba(0,0,0,.25); }
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .row > * { flex: 0 0 auto; }
-    label { font-size: 12px; color: var(--muted); display:block; margin-bottom: 6px; }
-    input, select { width: 100%; padding: 10px 10px; border-radius: 10px; border:1px solid var(--line); background:#0c132b; color: var(--text); }
-    .field { min-width: 180px; }
-    .field.small { min-width: 120px; }
-    .field.wide { min-width: 260px; flex: 1 1 auto; }
-    button { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--btn); color:white; cursor:pointer; font-weight: 650; }
-    button.secondary { background: var(--btn2); }
-    button:disabled { opacity: .5; cursor:not-allowed; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { padding: 9px 8px; border-bottom: 1px solid var(--line); color: var(--text); text-align:left; }
-    th { color: var(--muted); font-weight: 600; }
-    .muted { color: var(--muted); font-size: 12px; }
-    .pill { display:inline-block; font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
-    .ok { color: #7dffb3; }
-    .bad { color: #ff7d7d; }
+    :root { color-scheme: dark; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b1020; color:#e8ecff; }
+    .wrap { max-width:1100px; margin:0 auto; padding:24px; }
+    h1 { margin:0 0 14px; font-size:22px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+    .card { background:#0f1733; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    label { font-size:12px; opacity:.9; display:block; margin:10px 0 6px; }
+    input, select { background:#0b1020; border:1px solid rgba(255,255,255,.14); color:#e8ecff; padding:10px; border-radius:10px; outline:none; }
+    input { min-width: 180px; }
+    select { min-width: 200px; }
+    button { background:#3b5bfd; border:none; color:white; padding:10px 14px; border-radius:10px; cursor:pointer; }
+    button.secondary { background: rgba(255,255,255,.10); }
+    button.danger { background:#d84b4b; }
+    button:disabled { opacity:.55; cursor:not-allowed; }
+    .muted { opacity:.75; font-size:12px; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { padding:10px 8px; border-bottom:1px solid rgba(255,255,255,.08); font-size:13px; text-align:left; }
+    th { opacity:.8; font-weight:600; }
+    .statusDot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:8px; vertical-align:middle; background:#888; }
+    .ok { background:#35c26b; }
+    .bad { background:#d84b4b; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-    canvas { background: #0c132b; border-radius: 14px; border: 1px solid var(--line); }
     .full { grid-column: 1 / -1; }
   </style>
 </head>
-
 <body>
   <div class="wrap">
     <h1>Irrigation Web MVP</h1>
 
-    <div class="card">
-      <h2>Connection</h2>
-      <div class="row">
-        <div class="field wide">
-          <label>API Key (optional)</label>
-          <input id="apiToken" placeholder="Enter API key if enabled" />
+    <div class="card" style="margin-bottom:14px;">
+      <div class="row" style="justify-content:space-between;">
+        <div>
+          <span id="statusDot" class="statusDot"></span>
+          <span class="muted">Status:</span>
+          <span id="statusText" class="mono">Checking…</span>
         </div>
-        <div class="field small">
-          <label>&nbsp;</label>
-          <button class="secondary" onclick="saveToken()">Save</button>
-        </div>
-        <div class="field small">
-          <label>&nbsp;</label>
+
+        <div class="row">
+          <label style="margin:0">
+            <span class="muted">API Base URL (optional)</span><br />
+            <input id="baseUrl" placeholder="leave blank if same host" style="min-width:340px;" />
+          </label>
           <button class="secondary" onclick="refreshAll()">Refresh</button>
         </div>
-        <div class="field wide">
-          <label>Status</label>
-          <div id="status" class="muted">Not checked yet.</div>
-        </div>
+      </div>
+      <div class="muted" style="margin-top:10px;">
+        Tip: if frontend + backend are on the same domain, leave Base URL empty.
       </div>
     </div>
 
-    <div class="grid" style="margin-top:14px;">
+    <div class="grid">
 
-      <!-- Zones -->
+      <!-- ZONES -->
       <div class="card">
-        <h2>Zones</h2>
-
-        <div class="row">
-          <div class="field wide">
-            <label>Zone Name</label>
-            <input id="zoneName" placeholder="e.g. Block 2" />
-          </div>
-          <div class="field wide">
-            <label>Description</label>
-            <input id="zoneDesc" placeholder="optional" />
-          </div>
-          <div class="field small">
-            <label>&nbsp;</label>
-            <button onclick="createZone()">Create</button>
-          </div>
+        <div class="row" style="justify-content:space-between;">
+          <div><b>Zones</b></div>
+          <div class="muted">Create + list</div>
         </div>
 
-        <div style="margin-top:12px; overflow:auto; max-height: 280px;">
-          <table>
-            <thead>
-              <tr><th>ID</th><th>Name</th><th>Description</th></tr>
-            </thead>
-            <tbody id="zonesTable"></tbody>
-          </table>
+        <label>Zone name</label>
+        <input id="zoneName" placeholder="e.g. Block 2" />
+
+        <label>Description (optional)</label>
+        <input id="zoneDesc" placeholder="e.g. Avocado orchard - south" />
+
+        <div class="row" style="margin-top:10px;">
+          <button onclick="createZone()">Create zone</button>
         </div>
 
-        <div class="muted" id="zonesNote" style="margin-top:10px;"></div>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Name</th><th>Description</th></tr>
+          </thead>
+          <tbody id="zonesTbody"></tbody>
+        </table>
       </div>
 
-      <!-- Schedules -->
+      <!-- SCHEDULES -->
       <div class="card">
-        <h2>Schedules</h2>
+        <div class="row" style="justify-content:space-between;">
+          <div><b>Schedules</b></div>
+          <div class="row">
+            <button class="danger" onclick="resetSchedules()">Reset schedules</button>
+          </div>
+        </div>
+
+        <label>Zone</label>
+        <select id="schedZone"></select>
 
         <div class="row">
-          <div class="field wide">
-            <label>Zone</label>
-            <select id="schedZone"></select>
-          </div>
-
-          <div class="field small">
+          <div>
             <label>Start (HH:MM)</label>
-            <input id="schedTime" placeholder="06:30" value="06:30" />
+            <input id="schedStart" value="06:30" placeholder="06:30" />
           </div>
-
-          <div class="field small">
+          <div>
             <label>Minutes</label>
-            <input id="schedMinutes" type="number" min="1" max="1440" value="10" />
+            <input id="schedMinutes" type="number" min="1" value="10" />
           </div>
+        </div>
 
-          <div class="field small">
+        <div class="row">
+          <div>
+            <label>Days</label>
+            <input id="schedDays" value="*" placeholder="* or mon,tue,wed" />
+          </div>
+          <div>
             <label>Enabled</label>
             <select id="schedEnabled">
               <option value="true" selected>true</option>
@@ -131,431 +120,217 @@
           </div>
         </div>
 
-        <div class="row" style="margin-top:8px;">
-          <div class="field wide">
-            <label>Allowed days (e.g. *, mon,tue,wed)</label>
-            <input id="schedDays" placeholder="*" value="*" />
-          </div>
-
-          <div class="field small">
-            <label>Skip if moisture over</label>
-            <input id="schedSkipMoist" type="number" step="0.1" placeholder="(optional)" />
-          </div>
-
-          <div class="field small">
-            <label>Lookback (minutes)</label>
-            <input id="schedLookback" type="number" min="1" max="1440" value="120" />
-          </div>
-
-          <div class="field small">
-            <label>&nbsp;</label>
-            <button onclick="createSchedule()">Create</button>
-          </div>
+        <div class="row" style="margin-top:10px;">
+          <button onclick="createSchedule()">Create schedule</button>
         </div>
 
-        <div style="margin-top:12px; overflow:auto; max-height: 280px;">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th><th>Zone</th><th>Start</th><th>Min</th><th>Days</th><th>Skip&gt;</th><th>Lookback</th><th>Enabled</th><th>Last</th>
-              </tr>
-            </thead>
-            <tbody id="schedulesTable"></tbody>
-          </table>
-        </div>
-
-        <div class="muted" id="schedNote" style="margin-top:10px;"></div>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Zone</th><th>Start</th><th>Min</th><th>Days</th><th>Enabled</th></tr>
+          </thead>
+          <tbody id="schedTbody"></tbody>
+        </table>
       </div>
 
-      <!-- Manual Run -->
+      <!-- MANUAL RUN -->
       <div class="card">
-        <h2>Manual Run</h2>
-        <div class="row">
-          <div class="field wide">
-            <label>Zone</label>
-            <select id="runZone"></select>
-          </div>
-          <div class="field small">
-            <label>Minutes</label>
-            <input id="runMinutes" type="number" min="1" max="240" value="1" />
-          </div>
-          <div class="field small">
-            <label>&nbsp;</label>
-            <button onclick="manualRun()">Run now</button>
-          </div>
+        <div class="row" style="justify-content:space-between;">
+          <div><b>Manual run</b></div>
+          <div class="muted">Creates a run entry</div>
         </div>
-        <div class="muted" id="runNote" style="margin-top:10px;"></div>
+
+        <label>Zone</label>
+        <select id="runZone"></select>
+
+        <label>Minutes</label>
+        <input id="runMinutes" type="number" min="1" value="1" />
+
+        <div class="row" style="margin-top:10px;">
+          <button onclick="runNow()">Run now</button>
+        </div>
+
+        <div id="runMsg" class="muted" style="margin-top:10px;"></div>
       </div>
 
-      <!-- Charts -->
+      <!-- RECENT RUNS -->
       <div class="card">
-        <h2>Charts</h2>
-
-        <div class="row">
-          <div class="field wide">
-            <label>Zone</label>
-            <select id="chartZone"></select>
-          </div>
-
-          <div class="field small">
-            <label>Metric</label>
-            <select id="chartMetric">
-              <option value="moisture" selected>moisture</option>
-              <option value="temperature">temperature</option>
-              <option value="humidity">humidity</option>
-              <option value="pressure">pressure</option>
-              <option value="flow">flow</option>
-            </select>
-          </div>
-
-          <div class="field small">
-            <label>Hours</label>
-            <select id="chartHours">
-              <option value="6">6</option>
-              <option value="12">12</option>
-              <option value="24" selected>24</option>
-              <option value="72">72</option>
-              <option value="168">168</option>
-            </select>
-          </div>
-
-          <div class="field small">
-            <label>&nbsp;</label>
-            <button onclick="loadChartSeries()">Load</button>
-          </div>
+        <div class="row" style="justify-content:space-between;">
+          <div><b>Recent runs</b></div>
+          <div class="muted">Latest 100</div>
         </div>
 
-        <div style="margin-top:12px;">
-          <canvas id="chartCanvas" height="140"></canvas>
-          <div class="muted" id="chartNote" style="margin-top:8px;"></div>
-        </div>
-      </div>
-
-      <!-- Recent Runs -->
-      <div class="card full">
-        <h2>Recent Runs</h2>
-        <div class="row">
-          <span class="pill">Auto refresh: 10s</span>
-          <span id="runsCount" class="pill"></span>
-        </div>
-
-        <div style="margin-top:10px; overflow:auto; max-height: 340px;">
-          <table>
-            <thead>
-              <tr><th>Time (UTC)</th><th>Zone</th><th>Min</th><th>Source</th></tr>
-            </thead>
-            <tbody id="runsTable"></tbody>
-          </table>
-        </div>
-
-        <div class="muted" id="runsNote" style="margin-top:10px;"></div>
+        <table>
+          <thead>
+            <tr><th>Time (UTC)</th><th>Zone</th><th>Min</th><th>Source</th></tr>
+          </thead>
+          <tbody id="runsTbody"></tbody>
+        </table>
       </div>
 
     </div>
   </div>
 
 <script>
-  const TOKEN_KEY = "irrigation_api_key";
-  let chartInstance = null;
-
-  function apiHeaders() {
-    const token = (document.getElementById("apiToken")?.value || "").trim();
-    const h = { "Content-Type": "application/json" };
-    if (token) h["x-api-key"] = token;
-    return h;
+  function api(path) {
+    const base = document.getElementById("baseUrl").value.trim();
+    return (base ? base.replace(/\/+$/,'') : "") + path;
   }
 
-  function saveToken() {
-    const token = (document.getElementById("apiToken").value || "").trim();
-    localStorage.setItem(TOKEN_KEY, token);
-    setStatus(token ? "Saved API key." : "Cleared API key.");
-  }
-
-  function setStatus(msg, isError=false) {
-    const el = document.getElementById("status");
-    el.textContent = msg;
-    el.className = "muted " + (isError ? "bad" : "ok");
-  }
-
-  async function apiGet(path) {
-    const resp = await fetch(path, { headers: apiHeaders() });
-    if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
-    return await resp.json();
-  }
-
-  async function apiPost(path, body) {
-    const resp = await fetch(path, {
-      method: "POST",
-      headers: apiHeaders(),
-      body: JSON.stringify(body),
+  async function jfetch(path, options={}) {
+    const r = await fetch(api(path), {
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      ...options
     });
-    if (!resp.ok) {
-      const txt = await resp.text();
-      throw new Error(`${resp.status} ${resp.statusText} - ${txt}`);
-    }
-    return await resp.json();
+    let data = null;
+    try { data = await r.json(); } catch(e) {}
+    if (!r.ok) throw new Error((data && (data.detail || JSON.stringify(data))) || (r.status + " " + r.statusText));
+    return data;
+  }
+
+  function setStatus(ok, text) {
+    const dot = document.getElementById("statusDot");
+    dot.classList.remove("ok","bad");
+    dot.classList.add(ok ? "ok" : "bad");
+    document.getElementById("statusText").textContent = text;
+  }
+
+  function zoneNameById(zones, id) {
+    const z = zones.find(x => x.id === id);
+    return z ? z.name : ("#" + id);
   }
 
   async function checkHealth() {
     try {
-      const j = await apiGet("/health");
-      setStatus(`OK. db_ready=${j.db_ready} | ${j.ts}`);
+      const h = await jfetch("/health");
+      setStatus(true, `OK | ${h.ts || ""}`.trim());
     } catch (e) {
-      setStatus(`Health failed: ${e.message}`, true);
+      setStatus(false, "Backend not reachable");
     }
   }
 
   async function loadZones() {
-    const zones = await apiGet("/zones");
-    const tbody = document.getElementById("zonesTable");
-    tbody.innerHTML = "";
+    const zones = await jfetch("/zones");
+    const tbody = document.getElementById("zonesTbody");
+    tbody.innerHTML = zones.map(z => `
+      <tr>
+        <td class="mono">${z.id}</td>
+        <td>${escapeHtml(z.name)}</td>
+        <td>${escapeHtml(z.description || "")}</td>
+      </tr>
+    `).join("");
 
-    for (const z of zones) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${z.id}</td><td>${escapeHtml(z.name)}</td><td>${escapeHtml(z.description || "")}</td>`;
-      tbody.appendChild(tr);
-    }
+    // Fill dropdowns
+    const opts = zones.map(z => `<option value="${z.id}">${escapeHtml(z.name)}</option>`).join("");
+    document.getElementById("schedZone").innerHTML = opts;
+    document.getElementById("runZone").innerHTML = opts;
 
-    document.getElementById("zonesNote").textContent =
-      zones.length ? `${zones.length} zone(s).` : "No zones yet. Create one.";
-
-    // Populate selects
-    const schedSel = document.getElementById("schedZone");
-    const runSel = document.getElementById("runZone");
-    const chartSel = document.getElementById("chartZone");
-
-    for (const sel of [schedSel, runSel, chartSel]) {
-      const current = sel.value;
-      sel.innerHTML = "";
-      for (const z of zones) {
-        const opt = document.createElement("option");
-        opt.value = z.id;
-        opt.textContent = z.name;
-        opt.dataset.name = z.name;
-        sel.appendChild(opt);
-      }
-      // restore selection if possible
-      if (current) sel.value = current;
-    }
+    return zones;
   }
 
-  async function createZone() {
-    const name = (document.getElementById("zoneName").value || "").trim();
-    const description = (document.getElementById("zoneDesc").value || "").trim();
-    if (!name) return alert("Zone name required.");
-
-    try {
-      await apiPost("/zones", { name, description });
-      document.getElementById("zoneName").value = "";
-      document.getElementById("zoneDesc").value = "";
-      await loadZones();
-      await loadSchedules();
-      setStatus("Zone created.");
-    } catch (e) {
-      setStatus(`Create zone failed: ${e.message}`, true);
-      alert(e.message);
-    }
+  async function loadSchedules(zones) {
+    const sched = await jfetch("/schedules");
+    const tbody = document.getElementById("schedTbody");
+    tbody.innerHTML = sched.map(s => `
+      <tr>
+        <td class="mono">${s.id}</td>
+        <td>${escapeHtml(zoneNameById(zones, s.zone_id))}</td>
+        <td class="mono">${escapeHtml(s.start)}</td>
+        <td class="mono">${s.minutes}</td>
+        <td class="mono">${escapeHtml(s.days || "*")}</td>
+        <td class="mono">${s.enabled ? "true" : "false"}</td>
+      </tr>
+    `).join("");
   }
 
-  async function loadSchedules() {
-    const schedules = await apiGet("/schedules");
-    const zones = await apiGet("/zones");
-    const zoneById = {};
-    zones.forEach(z => zoneById[z.id] = z.name);
-
-    const tbody = document.getElementById("schedulesTable");
-    tbody.innerHTML = "";
-
-    for (const s of schedules) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${s.id}</td>
-        <td>${escapeHtml(zoneById[s.zone_id] || ("#" + s.zone_id))}</td>
-        <td class="mono">${escapeHtml(s.start_time)}</td>
-        <td>${s.duration_minutes}</td>
-        <td>${escapeHtml(s.days_of_week ?? "*")}</td>
-        <td>${(s.skip_if_moisture_over ?? "")}</td>
-        <td>${s.moisture_lookback_minutes ?? ""}</td>
-        <td>${s.enabled}</td>
-        <td class="mono">${escapeHtml(s.last_run_minute ?? "")}</td>
-      `;
-      tbody.appendChild(tr);
-    }
-
-    document.getElementById("schedNote").textContent =
-      schedules.length ? `${schedules.length} schedule(s).` : "No schedules yet.";
-  }
-
-  async function createSchedule() {
-    const zoneId = parseInt(document.getElementById("schedZone").value, 10);
-    if (!zoneId) return alert("Create a zone first.");
-
-    const start_time = (document.getElementById("schedTime").value || "").trim();
-    const duration_minutes = parseInt(document.getElementById("schedMinutes").value, 10);
-    const enabled = (document.getElementById("schedEnabled").value === "true");
-
-    const days_of_week = (document.getElementById("schedDays").value || "*").trim() || "*";
-    const skipRaw = (document.getElementById("schedSkipMoist").value || "").trim();
-    const skip_if_moisture_over = skipRaw ? parseFloat(skipRaw) : null;
-    const moisture_lookback_minutes = parseInt(document.getElementById("schedLookback").value, 10) || 120;
-
-    try {
-      await apiPost("/schedules", {
-        zone_id: zoneId,
-        start_time,
-        duration_minutes,
-        enabled,
-        days_of_week,
-        skip_if_moisture_over,
-        moisture_lookback_minutes
-      });
-      await loadSchedules();
-      setStatus("Schedule created.");
-    } catch (e) {
-      setStatus(`Create schedule failed: ${e.message}`, true);
-      alert(e.message);
-    }
-  }
-
-  async function manualRun() {
-    const zoneId = parseInt(document.getElementById("runZone").value, 10);
-    const minutes = parseInt(document.getElementById("runMinutes").value, 10) || 1;
-
-    // Find the selected option's display text (zone name)
-    const sel = document.getElementById("runZone");
-    const zoneName = sel.options[sel.selectedIndex]?.textContent;
-
-    if (!zoneName) return alert("Select a zone first.");
-
-    try {
-      const url = `/run/${encodeURIComponent(zoneName)}?minutes=${minutes}&source=manual`;
-      const resp = await fetch(url, { method: "POST", headers: apiHeaders() });
-      if (!resp.ok) {
-        const txt = await resp.text();
-        throw new Error(`${resp.status} ${resp.statusText} - ${txt}`);
-      }
-      const j = await resp.json();
-      document.getElementById("runNote").textContent =
-        `Run logged: ${j.zone_name} for ${j.duration_minutes} min (${j.source})`;
-      await loadRuns();
-      setStatus("Manual run logged.");
-    } catch (e) {
-      setStatus(`Manual run failed: ${e.message}`, true);
-      alert(e.message);
-    }
-  }
-
-  async function loadRuns() {
-    try {
-      const runs = await apiGet("/runs?limit=100");
-      const tbody = document.getElementById("runsTable");
-      tbody.innerHTML = "";
-
-      for (const r of runs) {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td class="mono">${escapeHtml((r.ts || "").replace("T"," ").replace("Z",""))}</td>
-          <td>${escapeHtml(r.zone_name)}</td>
-          <td>${r.duration_minutes}</td>
-          <td class="mono">${escapeHtml(r.source)}</td>
-        `;
-        tbody.appendChild(tr);
-      }
-
-      document.getElementById("runsCount").textContent = `${runs.length} rows`;
-      document.getElementById("runsNote").textContent = runs.length ? "" : "No runs yet.";
-    } catch (e) {
-      document.getElementById("runsNote").textContent = `Failed to load runs: ${e.message}`;
-    }
-  }
-
-  // ✅ FIXED: uses backend shape {labels:[], values:[]}
-  async function loadChartSeries() {
-    const zoneSel = document.getElementById("chartZone");
-    const zoneName = zoneSel.options[zoneSel.selectedIndex]?.textContent;
-    const metric = document.getElementById("chartMetric").value;
-    const hours = document.getElementById("chartHours").value;
-
-    if (!zoneName) {
-      document.getElementById("chartNote").textContent = "Create a zone first.";
-      return;
-    }
-
-    const url = `/chart/series?zone_name=${encodeURIComponent(zoneName)}&metric=${encodeURIComponent(metric)}&hours=${hours}`;
-
-    try {
-      const resp = await fetch(url, { headers: apiHeaders() });
-      if (!resp.ok) {
-        const txt = await resp.text();
-        throw new Error(`${resp.status} ${resp.statusText} - ${txt}`);
-      }
-
-      const data = await resp.json();
-      const labels = Array.isArray(data.labels) ? data.labels : [];
-      const values = Array.isArray(data.values) ? data.values : [];
-
-      document.getElementById("chartNote").textContent =
-        values.length ? `Loaded ${values.length} point(s).` : "No data points for that selection.";
-
-      const ctx = document.getElementById("chartCanvas").getContext("2d");
-
-      if (!chartInstance) {
-        chartInstance = new Chart(ctx, {
-          type: "line",
-          data: {
-            labels: labels,
-            datasets: [{
-              label: `${zoneName} - ${metric}`,
-              data: values,
-              borderWidth: 2,
-              pointRadius: 2
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: true } },
-            scales: {
-              x: { ticks: { maxTicksLimit: 10 } }
-            }
-          }
-        });
-      } else {
-        chartInstance.data.labels = labels;
-        chartInstance.data.datasets[0].label = `${zoneName} - ${metric}`;
-        chartInstance.data.datasets[0].data = values;
-        chartInstance.update();
-      }
-    } catch (e) {
-      document.getElementById("chartNote").textContent = `Chart load failed: ${e.message}`;
-      console.error(e);
-    }
-  }
-
-  function escapeHtml(s) {
-    return String(s ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+  async function loadRuns(zones) {
+    const runs = await jfetch("/runs");
+    const tbody = document.getElementById("runsTbody");
+    tbody.innerHTML = runs.map(r => `
+      <tr>
+        <td class="mono">${escapeHtml(r.ts)}</td>
+        <td>${escapeHtml(zoneNameById(zones, r.zone_id))}</td>
+        <td class="mono">${r.duration_minutes}</td>
+        <td class="mono">${escapeHtml(r.source || "")}</td>
+      </tr>
+    `).join("");
   }
 
   async function refreshAll() {
     await checkHealth();
-    await loadZones();
-    await loadSchedules();
-    await loadRuns();
-    // don’t auto-load chart; user clicks Load
+    const zones = await loadZones();
+    await loadSchedules(zones);
+    await loadRuns(zones);
   }
 
-  // init
-  (function init() {
-    document.getElementById("apiToken").value = localStorage.getItem(TOKEN_KEY) || "";
-    refreshAll();
-    setInterval(loadRuns, 10000);
-  })();
-</script>
+  async function createZone() {
+    const name = document.getElementById("zoneName").value.trim();
+    const description = document.getElementById("zoneDesc").value.trim();
+    if (!name) return alert("Zone name required");
 
+    // Backend expects query params in our minimal API (not JSON body)
+    const q = new URLSearchParams({ name, description }).toString();
+    await jfetch("/zones?" + q, { method: "POST" });
+
+    document.getElementById("zoneName").value = "";
+    document.getElementById("zoneDesc").value = "";
+    await refreshAll();
+  }
+
+  async function createSchedule() {
+    const zone_id = document.getElementById("schedZone").value;
+    const start = document.getElementById("schedStart").value.trim();
+    const minutes = document.getElementById("schedMinutes").value;
+    const days = document.getElementById("schedDays").value.trim() || "*";
+    const enabled = document.getElementById("schedEnabled").value;
+
+    if (!zone_id) return alert("Select a zone");
+    if (!/^\d{2}:\d{2}$/.test(start)) return alert("Start must be HH:MM");
+    if (!minutes || Number(minutes) < 1) return alert("Minutes must be >= 1");
+
+    const q = new URLSearchParams({
+      zone_id,
+      start,
+      minutes,
+      days,
+      enabled
+    }).toString();
+
+    await jfetch("/schedules?" + q, { method: "POST" });
+    await refreshAll();
+  }
+
+  async function resetSchedules() {
+    if (!confirm("Delete ALL schedules?")) return;
+    await jfetch("/admin/schedules", { method: "DELETE" });
+    await refreshAll();
+  }
+
+  async function runNow() {
+    const zone_id = document.getElementById("runZone").value;
+    const minutes = document.getElementById("runMinutes").value;
+    if (!zone_id) return alert("Select a zone");
+    if (!minutes || Number(minutes) < 1) return alert("Minutes must be >= 1");
+
+    const q = new URLSearchParams({ zone_id, minutes }).toString();
+    const r = await jfetch("/run?" + q, { method: "POST" });
+
+    document.getElementById("runMsg").textContent =
+      `Run logged: zone_id=${r.zone_id} minutes=${r.duration_minutes} ts=${r.ts}`;
+
+    await refreshAll();
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  // Boot
+  refreshAll();
+</script>
 </body>
 </html>
