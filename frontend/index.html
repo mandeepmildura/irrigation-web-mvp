@@ -163,11 +163,18 @@
   }
 
   async function jfetch(path, options={}) {
+  try {
     const r = await fetch(path, { headers: headers(), ...options });
     let data = null;
     try { data = await r.json(); } catch(e) {}
     if (!r.ok) throw new Error((data && (data.detail || JSON.stringify(data))) || (r.status + " " + r.statusText));
     return data;
+  } catch (e) {
+    alert("Error: " + e.message);
+    throw e;
+  }
+}
+
   }
 
   function setStatus(ok, text) {
