@@ -221,6 +221,12 @@ def create_zone(request: Request, name: str, description: str = "", db: Session 
 @app.get("/zones")
 def list_zones(db: Session = Depends(get_db)):
     return db.query(models.Zone).all()
+def cols(model):
+    return {c.name for c in model.__table__.columns}
+
+def build_kwargs(model, data: dict):
+    c = cols(model)
+    return {k: v for k, v in data.items() if k in c}
 
 # -------------------------------------------------
 # SCHEDULES
@@ -237,7 +243,25 @@ def create_schedule(
     db: Session = Depends(get_db),
 ):
     require_key(request)
-    sched = models.Schedule(zone_id=zone_id, start=start, minutes=minutes, days=days, enabled=enabled)
+
+    c = cols(models.Schedule)
+    data = {"zone_id": zone_id, "days": days, "enabled": enabled}
+
+    # start field name may differ
+    if "start" in c:
+        data["start"] = start
+    elif "start_time" in c:
+        data["start_time"] = start
+
+    # minutes field name may differ
+    if "minutes" in c:
+        data["minutes"] = minutes
+    elif "duration_minutes" in c:
+        data["duration_minutes"] = minutes
+    elif "duration" in c:
+        data["duration"] = minutes
+
+    sched = models.Schedule(**build_kwargs(models.Schedule, data))
     db.add(sched)
     db.commit()
     db.refresh(sched)
@@ -265,11 +289,31 @@ def manual_run(request: Request, zone_id: int, minutes: int, db: Session = Depen
 
     actuator_start(zone, mins)
 
-    run = models.Run(zone_id=zone_id, duration_minutes=mins, source="manual", ts=datetime.utcnow())
+    c = cols(models.Run)
+    data = {"zone_id": zone_id, "source": "manual"}
+
+    # duration field name may differ
+    if "duration_minutes" in c:
+        data["duration_minutes"] = mins
+    elif "minutes" in c:
+        data["minutes"] = mins
+    elif "duration" in c:
+        data["duration"] = mins
+
+    # timestamp field name may differ
+    if "ts" in c:
+        data["ts"] = datetime.utcnow()
+    elif "created_at" in c:
+        data["created_at"] = datetime.utcnow()
+    elif "time" in c:
+        data["time"] = datetime.utcnow()
+
+    run = models.Run(**build_kwargs(models.Run, data))
     db.add(run)
     db.commit()
     db.refresh(run)
     return run
+
 
 # -------------------------------------------------
 # RUN HISTORY
@@ -277,4 +321,16 @@ def manual_run(request: Request, zone_id: int, minutes: int, db: Session = Depen
 
 @app.get("/runs")
 def list_runs(db: Session = Depends(get_db)):
-    return db.query(models.Run).order_by(models.Run.ts.desc()).limit(100).all()
+    c = cols(models.Run)
+    if "ts" in c:
+        order_col = models.Run.ts
+    elif "created_at" in c:
+        order_col = models.Run.created_at
+    else:
+        order_col = None
+
+    q = db.query(models.Run)
+    if order_col is not None:
+        q = q.order_by(order_col.desc())
+
+    return q.limit(100).all()
