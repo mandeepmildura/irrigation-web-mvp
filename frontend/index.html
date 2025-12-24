@@ -19,8 +19,6 @@
     button { background:#3b5bfd; border:none; color:white; padding:10px 14px; border-radius:10px; cursor:pointer; }
     button.secondary { background: rgba(255,255,255,.10); }
     button.danger { background:#d84b4b; }
-    button:disabled { opacity:.55; cursor:not-allowed; }
-    .muted { opacity:.75; font-size:12px; }
     table { width:100%; border-collapse:collapse; margin-top:10px; }
     th, td { padding:10px 8px; border-bottom:1px solid rgba(255,255,255,.08); font-size:13px; text-align:left; }
     th { opacity:.8; font-weight:600; }
@@ -28,7 +26,6 @@
     .ok { background:#35c26b; }
     .bad { background:#d84b4b; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-    .full { grid-column: 1 / -1; }
   </style>
 </head>
 <body>
@@ -39,57 +36,50 @@
       <div class="row" style="justify-content:space-between;">
         <div>
           <span id="statusDot" class="statusDot"></span>
-          <span class="muted">Status:</span>
-          <span id="statusText" class="mono">Checking…</span>
+          <span class="mono" id="statusText">Checking…</span>
         </div>
 
         <div class="row">
           <label style="margin:0">
-            <span class="muted">API Base URL (optional)</span><br />
-            <input id="baseUrl" placeholder="leave blank if same host" style="min-width:340px;" />
+            <span style="opacity:.75;font-size:12px;">API Key</span><br />
+            <input id="apiKey" placeholder="required for create/reset/run" style="min-width:320px;" />
           </label>
           <button class="secondary" onclick="refreshAll()">Refresh</button>
         </div>
       </div>
-      <div class="muted" style="margin-top:10px;">
-        Tip: if frontend + backend are on the same domain, leave Base URL empty.
+      <div style="opacity:.7;font-size:12px;margin-top:10px;">
+        Times in “Recent runs” show in your local timezone.
       </div>
     </div>
 
     <div class="grid">
 
-      <!-- ZONES -->
       <div class="card">
         <div class="row" style="justify-content:space-between;">
           <div><b>Zones</b></div>
-          <div class="muted">Create + list</div>
+          <div style="opacity:.7;font-size:12px;">Create + list</div>
         </div>
 
         <label>Zone name</label>
         <input id="zoneName" placeholder="e.g. Block 2" />
 
         <label>Description (optional)</label>
-        <input id="zoneDesc" placeholder="e.g. Avocado orchard - south" />
+        <input id="zoneDesc" placeholder="e.g. Avocado orchard - south | default=10" />
 
         <div class="row" style="margin-top:10px;">
           <button onclick="createZone()">Create zone</button>
         </div>
 
         <table>
-          <thead>
-            <tr><th>ID</th><th>Name</th><th>Description</th></tr>
-          </thead>
+          <thead><tr><th>ID</th><th>Name</th><th>Description</th></tr></thead>
           <tbody id="zonesTbody"></tbody>
         </table>
       </div>
 
-      <!-- SCHEDULES -->
       <div class="card">
         <div class="row" style="justify-content:space-between;">
           <div><b>Schedules</b></div>
-          <div class="row">
-            <button class="danger" onclick="resetSchedules()">Reset schedules</button>
-          </div>
+          <button class="danger" onclick="resetSchedules()">Reset schedules</button>
         </div>
 
         <label>Zone</label>
@@ -98,18 +88,18 @@
         <div class="row">
           <div>
             <label>Start (HH:MM)</label>
-            <input id="schedStart" value="06:30" placeholder="06:30" />
+            <input id="schedStart" value="06:30" />
           </div>
           <div>
-            <label>Minutes</label>
-            <input id="schedMinutes" type="number" min="1" value="10" />
+            <label>Minutes (0 = use zone default)</label>
+            <input id="schedMinutes" type="number" min="0" value="10" />
           </div>
         </div>
 
         <div class="row">
           <div>
             <label>Days</label>
-            <input id="schedDays" value="*" placeholder="* or mon,tue,wed" />
+            <input id="schedDays" value="*" />
           </div>
           <div>
             <label>Enabled</label>
@@ -125,44 +115,38 @@
         </div>
 
         <table>
-          <thead>
-            <tr><th>ID</th><th>Zone</th><th>Start</th><th>Min</th><th>Days</th><th>Enabled</th></tr>
-          </thead>
+          <thead><tr><th>ID</th><th>Zone</th><th>Start</th><th>Min</th><th>Days</th><th>Enabled</th></tr></thead>
           <tbody id="schedTbody"></tbody>
         </table>
       </div>
 
-      <!-- MANUAL RUN -->
       <div class="card">
         <div class="row" style="justify-content:space-between;">
           <div><b>Manual run</b></div>
-          <div class="muted">Creates a run entry</div>
+          <div style="opacity:.7;font-size:12px;">Minutes 0 = zone default</div>
         </div>
 
         <label>Zone</label>
         <select id="runZone"></select>
 
         <label>Minutes</label>
-        <input id="runMinutes" type="number" min="1" value="1" />
+        <input id="runMinutes" type="number" min="0" value="1" />
 
         <div class="row" style="margin-top:10px;">
           <button onclick="runNow()">Run now</button>
         </div>
 
-        <div id="runMsg" class="muted" style="margin-top:10px;"></div>
+        <div id="runMsg" style="opacity:.7;font-size:12px;margin-top:10px;"></div>
       </div>
 
-      <!-- RECENT RUNS -->
       <div class="card">
         <div class="row" style="justify-content:space-between;">
           <div><b>Recent runs</b></div>
-          <div class="muted">Latest 100</div>
+          <div style="opacity:.7;font-size:12px;">Latest 100</div>
         </div>
 
         <table>
-          <thead>
-            <tr><th>Time (UTC)</th><th>Zone</th><th>Min</th><th>Source</th></tr>
-          </thead>
+          <thead><tr><th>Time (Local)</th><th>Zone</th><th>Min</th><th>Source</th></tr></thead>
           <tbody id="runsTbody"></tbody>
         </table>
       </div>
@@ -171,16 +155,15 @@
   </div>
 
 <script>
-  function api(path) {
-    const base = document.getElementById("baseUrl").value.trim();
-    return (base ? base.replace(/\/+$/,'') : "") + path;
+  function headers() {
+    const key = document.getElementById("apiKey").value.trim();
+    const h = { "Content-Type": "application/json" };
+    if (key) h["x-api-key"] = key;
+    return h;
   }
 
   async function jfetch(path, options={}) {
-    const r = await fetch(api(path), {
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-      ...options
-    });
+    const r = await fetch(path, { headers: headers(), ...options });
     let data = null;
     try { data = await r.json(); } catch(e) {}
     if (!r.ok) throw new Error((data && (data.detail || JSON.stringify(data))) || (r.status + " " + r.statusText));
@@ -194,9 +177,28 @@
     document.getElementById("statusText").textContent = text;
   }
 
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
   function zoneNameById(zones, id) {
     const z = zones.find(x => x.id === id);
     return z ? z.name : ("#" + id);
+  }
+
+  function utcToLocal(ts) {
+    if (!ts) return "";
+    // handles "2025-12-24T..." from backend
+    const d = new Date(ts.endsWith("Z") ? ts : (ts + "Z"));
+    return new Intl.DateTimeFormat(undefined, {
+      year:"numeric", month:"2-digit", day:"2-digit",
+      hour:"2-digit", minute:"2-digit", second:"2-digit"
+    }).format(d);
   }
 
   async function checkHealth() {
@@ -210,8 +212,7 @@
 
   async function loadZones() {
     const zones = await jfetch("/zones");
-    const tbody = document.getElementById("zonesTbody");
-    tbody.innerHTML = zones.map(z => `
+    document.getElementById("zonesTbody").innerHTML = zones.map(z => `
       <tr>
         <td class="mono">${z.id}</td>
         <td>${escapeHtml(z.name)}</td>
@@ -219,7 +220,6 @@
       </tr>
     `).join("");
 
-    // Fill dropdowns
     const opts = zones.map(z => `<option value="${z.id}">${escapeHtml(z.name)}</option>`).join("");
     document.getElementById("schedZone").innerHTML = opts;
     document.getElementById("runZone").innerHTML = opts;
@@ -229,8 +229,7 @@
 
   async function loadSchedules(zones) {
     const sched = await jfetch("/schedules");
-    const tbody = document.getElementById("schedTbody");
-    tbody.innerHTML = sched.map(s => `
+    document.getElementById("schedTbody").innerHTML = sched.map(s => `
       <tr>
         <td class="mono">${s.id}</td>
         <td>${escapeHtml(zoneNameById(zones, s.zone_id))}</td>
@@ -244,10 +243,9 @@
 
   async function loadRuns(zones) {
     const runs = await jfetch("/runs");
-    const tbody = document.getElementById("runsTbody");
-    tbody.innerHTML = runs.map(r => `
+    document.getElementById("runsTbody").innerHTML = runs.map(r => `
       <tr>
-        <td class="mono">${escapeHtml(r.ts)}</td>
+        <td class="mono">${escapeHtml(utcToLocal(r.ts))}</td>
         <td>${escapeHtml(zoneNameById(zones, r.zone_id))}</td>
         <td class="mono">${r.duration_minutes}</td>
         <td class="mono">${escapeHtml(r.source || "")}</td>
@@ -266,11 +264,8 @@
     const name = document.getElementById("zoneName").value.trim();
     const description = document.getElementById("zoneDesc").value.trim();
     if (!name) return alert("Zone name required");
-
-    // Backend expects query params in our minimal API (not JSON body)
     const q = new URLSearchParams({ name, description }).toString();
     await jfetch("/zones?" + q, { method: "POST" });
-
     document.getElementById("zoneName").value = "";
     document.getElementById("zoneDesc").value = "";
     await refreshAll();
@@ -283,18 +278,8 @@
     const days = document.getElementById("schedDays").value.trim() || "*";
     const enabled = document.getElementById("schedEnabled").value;
 
-    if (!zone_id) return alert("Select a zone");
     if (!/^\d{2}:\d{2}$/.test(start)) return alert("Start must be HH:MM");
-    if (!minutes || Number(minutes) < 1) return alert("Minutes must be >= 1");
-
-    const q = new URLSearchParams({
-      zone_id,
-      start,
-      minutes,
-      days,
-      enabled
-    }).toString();
-
+    const q = new URLSearchParams({ zone_id, start, minutes, days, enabled }).toString();
     await jfetch("/schedules?" + q, { method: "POST" });
     await refreshAll();
   }
@@ -308,28 +293,12 @@
   async function runNow() {
     const zone_id = document.getElementById("runZone").value;
     const minutes = document.getElementById("runMinutes").value;
-    if (!zone_id) return alert("Select a zone");
-    if (!minutes || Number(minutes) < 1) return alert("Minutes must be >= 1");
-
     const q = new URLSearchParams({ zone_id, minutes }).toString();
     const r = await jfetch("/run?" + q, { method: "POST" });
-
-    document.getElementById("runMsg").textContent =
-      `Run logged: zone_id=${r.zone_id} minutes=${r.duration_minutes} ts=${r.ts}`;
-
+    document.getElementById("runMsg").textContent = `Run logged: ${utcToLocal(r.ts)} | ${r.duration_minutes} min`;
     await refreshAll();
   }
 
-  function escapeHtml(s) {
-    return String(s ?? "")
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
-  }
-
-  // Boot
   refreshAll();
 </script>
 </body>
